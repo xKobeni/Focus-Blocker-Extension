@@ -1,0 +1,126 @@
+[
+  {
+    "title": "First Steps",
+    "description": "Tracked your first website",
+    "icon": "🌐",
+    "type": "count",
+    "threshold": 1,
+    "field": "totalMetrics"
+  },
+  {
+    "title": "Explorer",
+    "description": "Tracked 10 different websites",
+    "icon": "🗺️",
+    "type": "uniqueDomains",
+    "threshold": 10
+  },
+  {
+    "title": "World Traveler",
+    "description": "Tracked 50 different websites",
+    "icon": "🌍",
+    "type": "uniqueDomains",
+    "threshold": 50
+  },
+  {
+    "title": "Digital Nomad",
+    "description": "Tracked 100 different websites",
+    "icon": "🚀",
+    "type": "uniqueDomains",
+    "threshold": 100
+  },
+  {
+    "title": "Time Tracker",
+    "description": "Tracked 1 hour of total usage",
+    "icon": "⏱️",
+    "type": "totalTime",
+    "threshold": 3600,
+    "unit": "seconds"
+  },
+  {
+    "title": "Dedicated Tracker",
+    "description": "Tracked 10 hours of total usage",
+    "icon": "⏰",
+    "type": "totalTime",
+    "threshold": 36000,
+    "unit": "seconds"
+  },
+  {
+    "title": "Time Master",
+    "description": "Tracked 100 hours of total usage",
+    "icon": "👑",
+    "type": "totalTime",
+    "threshold": 360000,
+    "unit": "seconds"
+  },
+  {
+    "title": "Daily Tracker",
+    "description": "Tracked usage for 7 consecutive days",
+    "icon": "📅",
+    "type": "consecutiveDays",
+    "threshold": 7
+  },
+  {
+    "title": "Consistent Tracker",
+    "description": "Tracked usage for 30 consecutive days",
+    "icon": "📆",
+    "type": "consecutiveDays",
+    "threshold": 30
+  },
+  {
+    "title": "Productivity Focus",
+    "description": "Spent 10 hours on productivity websites",
+    "icon": "💼",
+    "type": "categoryTime",
+    "category": "productivity",
+    "threshold": 36000,
+    "unit": "seconds"
+  },
+  {
+    "title": "Social Butterfly",
+    "description": "Visited 20 social media sites",
+    "icon": "🦋",
+    "type": "categoryDomains",
+    "category": "social",
+    "threshold": 20
+  },
+  {
+    "title": "Video Enthusiast",
+    "description": "Spent 5 hours watching videos",
+    "icon": "🎬",
+    "type": "categoryTime",
+    "category": "video",
+    "threshold": 18000,
+    "unit": "seconds"
+  },
+  {
+    "title": "News Junkie",
+    "description": "Visited 15 news websites",
+    "icon": "📰",
+    "type": "categoryDomains",
+    "category": "news",
+    "threshold": 15
+  },
+  {
+    "title": "Busy Day",
+    "description": "Visited 20 different sites in one day",
+    "icon": "🔥",
+    "type": "dailyUniqueDomains",
+    "threshold": 20
+  },
+  {
+    "title": "Marathon Session",
+    "description": "Spent 3 hours browsing in one day",
+    "icon": "🏃",
+    "type": "dailyTotalTime",
+    "threshold": 10800,
+    "unit": "seconds"
+  },
+  {
+    "title": "Data Collector",
+    "description": "Recorded 1000 usage entries",
+    "icon": "📊",
+    "type": "count",
+    "threshold": 1000,
+    "field": "totalMetrics"
+  }
+]

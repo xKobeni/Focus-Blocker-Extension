@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Site Blocked - Focus Blocker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s ease;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      max-width: 600px;
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+    }
+
+    .icon img {
+      max-width: 120px;
+      max-height: 120px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+    }
+
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 20px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    p {
+      font-size: 1.2em;
+      margin-bottom: 30px;
+      opacity: 0.95;
+    }
+
+    .quote {
+      font-style: italic;
+      font-size: 1.1em;
+      margin: 30px 0;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(5px);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn {
+      padding: 12px 30px;
+      font-size: 1em;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      color: white;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon" id="icon">🚫</div>
+    <h1 id="title">Site Blocked</h1>
+    <p id="message">This website is on your blocked list during focus sessions.</p>
+    
+    <div class="quote" id="quote">
+      "Focus is the gateway to thinking clearly, and clear thinking is the gateway to true productivity."
+    </div>
+
+    <p>Stay focused on your goals! 🎯</p>
+    
+    <button class="btn" onclick="window.close()">Close Tab</button>
+  </div>
+
+  <script>
+    // Load custom block page settings
+    chrome.storage.local.get(['customBlockPage'], (data) => {
+      const blockPage = data.customBlockPage;
+      
+      if (blockPage && blockPage.isActive !== false) {
+        // Apply background color
+        if (blockPage.backgroundColor) {
+          document.body.style.background = blockPage.backgroundColor;
+        }
+        
+        // Apply text color
+        const textColor = blockPage.textColor || '#ffffff';
+        document.body.style.color = textColor;
+        document.querySelectorAll('h1, p, .quote').forEach(el => {
+          el.style.color = textColor;
+        });
+        
+        // Update title
+        if (blockPage.title) {
+          document.getElementById('title').textContent = blockPage.title;
+          document.title = blockPage.title + ' - Focus Blocker';
+        }
+        
+        // Update message
+        if (blockPage.message) {
+          document.getElementById('message').textContent = blockPage.message;
+        }
+        
+        // Update quote
+        if (blockPage.quote) {
+          document.getElementById('quote').textContent = `"${blockPage.quote}"`;
+        }
+        
+        // Update icon
+        const iconEl = document.getElementById('icon');
+        if (blockPage.iconType === 'image' || blockPage.iconType === 'gif') {
+          if (blockPage.iconUrl) {
+            iconEl.innerHTML = `<img src="${blockPage.iconUrl}" alt="Icon" />`;
+          }
+        } else if (blockPage.icon) {
+          iconEl.textContent = blockPage.icon;
+        }
+        
+        console.log('✅ Custom block page applied to blocked.html');
+      } else {
+        console.log('⚠️ Using default block page');
+      }
+    });
+  </script>
+</body>
+</html>

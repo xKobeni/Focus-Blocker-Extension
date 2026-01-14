@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Connecting to Extension...</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    h1 {
+      font-size: 1.5em;
+      margin-bottom: 10px;
+    }
+
+    p {
+      opacity: 0.9;
+    }
+
+    .success {
+      font-size: 50px;
+      margin-bottom: 20px;
+    }
+
+    .error {
+      color: #ff6b6b;
+      font-size: 40px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h1 id="message">Connecting to extension...</h1>
+    <p id="details">Please wait while we sync your authentication.</p>
+  </div>
+
+  <script>
+    // Get token from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    if (token) {
+      // Save token to extension storage
+      chrome.storage.local.set({ token }, () => {
+        document.querySelector('.spinner').style.display = 'none';
+        document.querySelector('.container').innerHTML = `
+          <div class="success">✅</div>
+          <h1>Successfully Connected!</h1>
+          <p>Your extension is now authenticated.</p>
+          <p style="margin-top: 20px;">This window will close automatically...</p>
+        `;
+
+        // Close window after 2 seconds
+        setTimeout(() => {
+          window.close();
+        }, 2000);
+      });
+    } else {
+      document.querySelector('.spinner').style.display = 'none';
+      document.querySelector('.container').innerHTML = `
+        <div class="error">❌</div>
+        <h1>Connection Failed</h1>
+        <p>No authentication token found.</p>
+        <p style="margin-top: 20px;">Please try logging in again.</p>
+      `;
+
+      // Close window after 3 seconds
+      setTimeout(() => {
+        window.close();
+      }, 3000);
+    }
+  </script>
+</body>
+</html>

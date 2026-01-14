@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "AI Focus Blocker",
+  "version": "1.0.0",
+  "description": "AI-powered website blocker to help you stay focused and productive",
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "pages/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["pages/blocked.html", "pages/auth-bridge.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

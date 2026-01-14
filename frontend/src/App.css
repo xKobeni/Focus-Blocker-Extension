@@ -1,0 +1,7 @@
+/* Basic app-level styles (most layout handled with Tailwind in index.css) */
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
