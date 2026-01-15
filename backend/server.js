@@ -24,6 +24,8 @@ const { default: scheduleRoutes } = await import('./routes/Schedule.routes.js');
 const { default: customBlockPageRoutes } = await import('./routes/CustomBlockPage.routes.js');
 const { default: gifSearchRoutes } = await import('./routes/GifSearch.routes.js');
 const { default: quoteRoutes } = await import('./routes/Quote.routes.js');
+const { default: challengeRoutes } = await import('./routes/Challenge.routes.js');
+const { default: temporaryUnlockRoutes } = await import('./routes/TemporaryUnlock.routes.js');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -58,6 +60,8 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/custom-block-page', customBlockPageRoutes);
 app.use('/api/gifs', gifSearchRoutes);
 app.use('/api/quotes', quoteRoutes);
+app.use('/api/challenges', challengeRoutes);
+app.use('/api/temporary-unlocks', temporaryUnlockRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFound);
