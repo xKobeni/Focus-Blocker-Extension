@@ -5,11 +5,11 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
   width: 380px;
   min-height: 500px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: #0f172a; /* slate-950 */
+  color: #f1f5f9; /* slate-100 */
   overflow-x: hidden;
 }
 
@@ -22,10 +22,9 @@ body {
 
 /* Header */
 .header {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
+  background: #1e293b; /* slate-800 */
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid #334155; /* slate-700 */
 }
 
 .logo {
@@ -37,12 +36,14 @@ body {
 .logo-icon {
   font-size: 24px;
   animation: float 3s ease-in-out infinite;
+  color: #34d399; /* emerald-400 */
 }
 
 .logo-text {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.5px;
+  color: #f1f5f9; /* slate-100 */
 }
 
 @keyframes float {
@@ -61,8 +62,8 @@ body {
 }
 
 .spinner {
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top: 4px solid white;
+  border: 4px solid #334155; /* slate-700 */
+  border-top: 4px solid #34d399; /* emerald-400 */
   border-radius: 50%;
   width: 50px;
   height: 50px;
@@ -77,7 +78,7 @@ body {
 
 .loading-text {
   font-size: 14px;
-  opacity: 0.85;
+  color: #94a3b8; /* slate-400 */
   font-weight: 500;
 }
 
@@ -93,25 +94,31 @@ body {
 .auth-content {
   text-align: center;
   width: 100%;
+  background: #1e293b; /* slate-800 */
+  border: 1px solid #334155; /* slate-700 */
+  border-radius: 12px;
+  padding: 32px 24px;
 }
 
 .auth-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #34d399; /* emerald-400 */
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
 .auth-title {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
+  color: #f1f5f9; /* slate-100 */
 }
 
 .auth-subtitle {
   font-size: 14px;
-  opacity: 0.85;
-  margin-bottom: 30px;
+  color: #94a3b8; /* slate-400 */
+  margin-bottom: 24px;
 }
 
 @keyframes pulse-soft {
@@ -130,26 +137,26 @@ body {
 
 /* User Welcome */
 .user-welcome {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
+  background: #1e293b; /* slate-800 */
   padding: 16px;
-  border-radius: 16px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #334155; /* slate-700 */
 }
 
 .user-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: #334155; /* slate-700 */
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24px;
   flex-shrink: 0;
+  color: #34d399; /* emerald-400 */
 }
 
 .user-details {
@@ -158,24 +165,24 @@ body {
 
 .user-greeting {
   font-size: 12px;
-  opacity: 0.8;
+  color: #94a3b8; /* slate-400 */
   margin-bottom: 2px;
 }
 
 .user-name {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
+  color: #f1f5f9; /* slate-100 */
 }
 
 /* Status Card */
 .status-card {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
+  background: #1e293b; /* slate-800 */
   padding: 16px;
-  border-radius: 16px;
+  border-radius: 12px;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #334155; /* slate-700 */
   position: relative;
   overflow: hidden;
 }
@@ -186,7 +193,7 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: rgba(255, 255, 255, 0.3);
+  background: #475569; /* slate-600 */
 }
 
 .status {
@@ -194,6 +201,7 @@ body {
   font-weight: 600;
   margin: 0;
   letter-spacing: -0.2px;
+  color: #f1f5f9; /* slate-100 */
 }
 
 .status.active {
@@ -201,7 +209,7 @@ body {
 }
 
 .status.active + .status-indicator {
-  background: linear-gradient(90deg, #4CAF50, #81C784);
+  background: linear-gradient(90deg, #10b981, #34d399); /* emerald-600 to emerald-400 */
   animation: pulse-indicator 2s infinite;
 }
 
@@ -233,27 +241,8 @@ body {
   overflow: hidden;
 }
 
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
-}
-
-.btn:active::before {
-  width: 300px;
-  height: 300px;
-}
-
 .btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
 }
 
 .btn:active {
@@ -266,25 +255,25 @@ body {
 }
 
 .btn-primary {
-  background: white;
-  color: #667eea;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #10b981; /* emerald-600 */
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .btn-primary:hover {
-  background: #f8f9ff;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  background: #059669; /* emerald-500 */
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
 }
 
 .btn-success {
-  background: linear-gradient(135deg, #4CAF50, #66BB6A);
+  background: #10b981; /* emerald-600 */
   color: white;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .btn-success:hover {
-  background: linear-gradient(135deg, #43A047, #5CB860);
-  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+  background: #059669; /* emerald-500 */
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
 }
 
 .btn-danger {
@@ -300,15 +289,14 @@ body {
 
 .btn-link {
   background: transparent;
-  color: white;
+  color: #94a3b8; /* slate-400 */
   padding: 10px 16px;
   font-size: 13px;
-  opacity: 0.8;
 }
 
 .btn-link:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9; /* slate-100 */
+  background: #334155; /* slate-700 */
   transform: none;
   box-shadow: none;
 }
@@ -324,7 +312,7 @@ body {
 .footer {
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid #334155; /* slate-700 */
   display: flex;
   justify-content: center;
 }
@@ -337,16 +325,15 @@ body {
 }
 
 .stat-item {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
+  background: #1e293b; /* slate-800 */
+  border-radius: 12px;
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #334155; /* slate-700 */
   position: relative;
   overflow: hidden;
 }
@@ -358,7 +345,7 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.5), transparent); /* emerald-400 */
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -368,29 +355,30 @@ body {
 }
 
 .stat-item:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: #334155; /* slate-700 */
   transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  border-color: #475569; /* slate-600 */
 }
 
 /* Individual stat colors */
 .stat-level:hover {
-  border-color: rgba(255, 215, 0, 0.5);
+  border-color: rgba(52, 211, 153, 0.5); /* emerald-400 */
 }
 
 .stat-xp:hover {
-  border-color: rgba(76, 175, 80, 0.5);
+  border-color: rgba(16, 185, 129, 0.5); /* emerald-600 */
 }
 
 .stat-streak:hover {
-  border-color: rgba(255, 87, 34, 0.5);
+  border-color: rgba(16, 185, 129, 0.5); /* emerald-600 */
 }
 
 .stat-icon-wrapper {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: #334155; /* slate-700 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -399,7 +387,7 @@ body {
 
 .stat-item:hover .stat-icon-wrapper {
   transform: rotate(10deg) scale(1.1);
-  background: rgba(255, 255, 255, 0.25);
+  background: #475569; /* slate-600 */
 }
 
 .stat-icon {
@@ -414,7 +402,7 @@ body {
 
 .stat-label {
   font-size: 10px;
-  opacity: 0.85;
+  color: #94a3b8; /* slate-400 */
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 4px;
@@ -424,8 +412,7 @@ body {
 .stat-value {
   font-size: 22px;
   font-weight: 800;
-  color: white;
+  color: #f1f5f9; /* slate-100 */
   letter-spacing: -0.5px;
   line-height: 1;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }

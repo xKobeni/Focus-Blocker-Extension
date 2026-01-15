@@ -27,6 +27,158 @@ function initializeUsageTracking() {
 // Start usage tracking immediately
 initializeUsageTracking();
 
+// Helper function to sync from backend (used by both message handler and periodic sync)
+async function syncFromBackend(syncType = "all") {
+  console.log(`🔄 Syncing from backend: ${syncType}`);
+  
+  if (syncType === "all" || syncType === "blockedSites") {
+    await loadBlockedSites();
+    updateBlockingState();
+    console.log("✅ Blocked sites synced");
+  }
+  
+  if (syncType === "all" || syncType === "customBlockPage") {
+    await loadCustomBlockPage();
+    if (isBlocking) {
+      updateBlockingState();
+    }
+    console.log("✅ Custom block page synced");
+  }
+  
+  if (syncType === "all" || syncType === "timeLimits") {
+    if (self.timeLimitManager) {
+      await self.timeLimitManager.loadTimeLimits();
+      updateBlockingState();
+      console.log("✅ Time limits synced");
+    }
+  }
+  
+  if (syncType === "all" || syncType === "schedules") {
+    if (self.scheduleManager) {
+      await self.scheduleManager.loadActiveSchedules();
+      updateBlockingState();
+      console.log("✅ Schedules synced");
+    }
+  }
+  
+  if (syncType === "all" || syncType === "focusSession") {
+    // Check for active session from backend
+    chrome.storage.local.get("token", async ({ token }) => {
+      if (!token) return;
+      
+      try {
+        const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+        
+        // Handle rate limiting on user fetch
+        if (userResponse.status === 429) {
+          console.warn("🔄 Rate limited when syncing focus session (user fetch), skipping");
+          resolve();
+          return;
+        }
+        
+        if (userResponse.ok) {
+          const user = await userResponse.json();
+          const userId = user._id || user.id;
+          
+          if (!userId) {
+            console.warn("⚠️ No user ID found when syncing focus session");
+            resolve();
+            return;
+          }
+          
+          // Get active sessions
+          const sessionsResponse = await fetch(`${API_BASE_URL}/focus-sessions/user/${userId}/active`, {
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
+          });
+          
+          // Handle rate limiting
+          if (sessionsResponse.status === 429) {
+            console.warn("🔄 Rate limited when syncing focus session, will retry later");
+            resolve();
+            return;
+          }
+          
+          if (sessionsResponse.ok) {
+            const activeSessions = await sessionsResponse.json();
+            if (activeSessions.length > 0) {
+              const session = activeSessions[0];
+              chrome.storage.local.set({ activeSessionId: session._id || session.id });
+              console.log("✅ Active focus session synced:", session._id || session.id);
+              
+              // If session is active but blocking isn't, start blocking
+              if (!isBlocking) {
+                isBlocking = true;
+                distractionCount = 0;
+                await loadBlockedSites();
+                updateBlockingState();
+                checkAllOpenTabs();
+              }
+            } else {
+              // No active session, clear it
+              chrome.storage.local.remove("activeSessionId");
+              console.log("✅ No active session found, cleared");
+              
+              // Stop blocking if no session
+              if (isBlocking) {
+                isBlocking = false;
+                distractionCount = 0;
+                updateBlockingState();
+                
+                if (self.timeLimitManager) {
+                  self.timeLimitManager.stopTimeLimitChecking();
+                }
+                if (self.scheduleManager) {
+                  self.scheduleManager.stopScheduleChecking();
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error syncing focus session:", error);
+      }
+    });
+  }
+}
+
+// Periodic sync from backend (every 30 seconds)
+// This ensures extension stays in sync with database even if notifications are missed
+let syncInterval = null;
+
+function startPeriodicSync() {
+  // Clear existing interval if any
+  if (syncInterval) {
+    clearInterval(syncInterval);
+  }
+  
+  // Sync every 120 seconds (2 minutes) to significantly reduce API calls and avoid rate limiting
+  syncInterval = setInterval(() => {
+    chrome.storage.local.get("token", ({ token }) => {
+      if (token) {
+        console.log("🔄 Periodic sync from backend...");
+        // Call sync function directly (we're in background script)
+        syncFromBackend("all").catch((error) => {
+          // Don't log rate limiting errors as errors
+          if (!error.message?.includes('429') && !error.message?.includes('Rate limited')) {
+            console.error("❌ Periodic sync error:", error);
+          }
+        });
+      }
+    });
+  }, 120000); // 120 seconds (2 minutes) - significantly reduced frequency
+}
+
+// Start periodic sync
+startPeriodicSync();
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("🎯 Focus Blocker Installed");
   loadBlockedSites(); // This also loads custom block page
@@ -107,8 +259,25 @@ async function updateBlockingState() {
     });
   });
   
-  await chrome.storage.local.set({
+  // CRITICAL: Only set isBlocking to true if we have blocked sites, time limits, or schedules
+  const hasBlockedSites = blockedSites && blockedSites.length > 0;
+  const hasTimeLimits = storageData.timeLimits && storageData.timeLimits.length > 0;
+  const hasSchedules = storageData.activeSchedules && storageData.activeSchedules.length > 0;
+  
+  // Only enable blocking if we have something to block
+  const shouldBeBlocking = isBlocking && (hasBlockedSites || hasTimeLimits || hasSchedules);
+  
+  console.log('📊 Updating blocking state:', {
     isBlocking: isBlocking,
+    shouldBeBlocking: shouldBeBlocking,
+    blockedSitesCount: blockedSites.length,
+    hasTimeLimits: hasTimeLimits,
+    hasSchedules: hasSchedules,
+    hasActiveSession: !!sessionData.activeSessionId
+  });
+  
+  await chrome.storage.local.set({
+    isBlocking: shouldBeBlocking, // Use shouldBeBlocking instead of isBlocking
     blockedSites: blockedSites,
     customBlockPage: storageData.customBlockPage || null,
     timeLimits: storageData.timeLimits || [],
@@ -122,7 +291,7 @@ async function updateBlockingState() {
       try {
         await chrome.tabs.sendMessage(tab.id, {
           action: "updateBlockingState",
-          isBlocking: isBlocking,
+          isBlocking: shouldBeBlocking, // Use shouldBeBlocking
           activeSessionId: sessionData.activeSessionId || null, // Include session ID
           blockedSites: blockedSites,
           customBlockPage: storageData.customBlockPage || null,
@@ -139,26 +308,52 @@ async function updateBlockingState() {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startBlocking") {
-    isBlocking = true;
-    distractionCount = 0;
     loadBlockedSites().then(() => {
-      console.log("🔥 Blocking started with", blockedSites.length, "sites");
-      updateBlockingState();
-      // Check all currently open tabs
-      checkAllOpenTabs();
+      // Only start blocking if we have blocked sites, time limits, or schedules
+      const hasBlockedSites = blockedSites && blockedSites.length > 0;
       
-      // Start time limit and schedule checking
-      setTimeout(() => {
-        if (self.timeLimitManager) {
-          self.timeLimitManager.startTimeLimitChecking();
-          console.log('⏱️ Time limit checking started');
+      // Check for time limits and schedules
+      chrome.storage.local.get(['timeLimits', 'activeSchedules'], (result) => {
+        const hasTimeLimits = result.timeLimits && result.timeLimits.length > 0;
+        const hasSchedules = result.activeSchedules && result.activeSchedules.length > 0;
+        
+        if (hasBlockedSites || hasTimeLimits || hasSchedules) {
+          isBlocking = true;
+          distractionCount = 0;
+          console.log("🔥 Blocking started with", blockedSites.length, "blocked sites", 
+                     hasTimeLimits ? `, ${result.timeLimits.length} time limits` : '',
+                     hasSchedules ? `, ${result.activeSchedules.length} schedules` : '');
+          updateBlockingState();
+          // Check all currently open tabs
+          checkAllOpenTabs();
+          
+          // Start time limit and schedule checking
+          setTimeout(() => {
+            if (self.timeLimitManager) {
+              self.timeLimitManager.startTimeLimitChecking();
+              console.log('⏱️ Time limit checking started');
+            }
+            if (self.scheduleManager) {
+              self.scheduleManager.startScheduleChecking();
+              console.log('📅 Schedule checking started');
+            }
+          }, 2000); // Wait a bit for managers to load
+          
+          // Immediately sync with backend to ensure we have the latest session
+          setTimeout(() => {
+            syncFromBackend("focusSession").catch(err => {
+              console.debug("Session sync after start:", err.message);
+            });
+          }, 1000);
+        } else {
+          console.warn("⚠️ Cannot start blocking: No blocked sites, time limits, or schedules configured");
+          isBlocking = false;
+          updateBlockingState();
         }
-        if (self.scheduleManager) {
-          self.scheduleManager.startScheduleChecking();
-          console.log('📅 Schedule checking started');
-        }
-      }, 2000); // Wait a bit for managers to load
+      });
     });
+    sendResponse({ status: "started" });
+    return true;
   } else if (message.action === "stopBlocking") {
     isBlocking = false;
     distractionCount = 0;
@@ -172,6 +367,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (self.scheduleManager) {
       self.scheduleManager.stopScheduleChecking();
     }
+    
+    // Immediately sync with backend to ensure session is ended
+    setTimeout(() => {
+      syncFromBackend("focusSession").catch(err => {
+        console.debug("Session sync after stop:", err.message);
+      });
+    }, 1000);
+    
+    sendResponse({ status: "stopped" });
+    return true;
   } else if (message.action === "getDistractionCount") {
     sendResponse({ count: distractionCount });
   } else if (message.action === "reloadBlockedSites") {
@@ -209,6 +414,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       updateBlockingState();
       sendResponse({ status: "reloaded" });
     });
+  } else if (message.action === "syncFromBackend") {
+    // Sync data from backend (triggered by frontend changes or periodic sync)
+    const syncType = message.syncType || "all";
+    syncFromBackend(syncType).then(() => {
+      sendResponse({ status: "synced" });
+    }).catch((error) => {
+      console.error("❌ Sync error:", error);
+      sendResponse({ status: "error", error: error.message });
+    });
+    return true; // Keep channel open for async
   }
   return true; // Keep message channel open for async response
 });
@@ -327,11 +542,23 @@ async function loadCustomBlockPage() {
         });
 
         if (!userResponse.ok) {
+          // Handle rate limiting
+          if (userResponse.status === 429) {
+            console.warn("📄 Rate limited when loading custom block page, skipping");
+            resolve();
+            return;
+          }
           throw new Error("Failed to fetch user info");
         }
 
         const user = await userResponse.json();
         const userId = user._id || user.id;
+        
+        if (!userId) {
+          console.warn("⚠️ No user ID found when loading custom block page");
+          resolve();
+          return;
+        }
 
         // Get custom block page - try /me endpoint first (uses authenticated user)
         let response = await fetch(`${API_BASE_URL}/custom-block-page/me`, {
@@ -406,6 +633,13 @@ async function loadBlockedSites() {
         });
 
         if (!response.ok) {
+          // Handle rate limiting
+          if (response.status === 429) {
+            console.warn("📋 Rate limited when loading blocked sites, skipping");
+            blockedSites = [];
+            resolve();
+            return;
+          }
           throw new Error("Failed to fetch blocked sites");
         }
 

@@ -69,6 +69,10 @@ function BlockedSitesPage() {
       setNewSiteUrl('');
       setNewSiteCategory('custom');
       showSuccess('Site blocked successfully!');
+      
+      // Notify extension to sync
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to add blocked site');
     } finally {
@@ -82,6 +86,10 @@ function BlockedSitesPage() {
       await deleteBlockedSite(siteId);
       await loadBlockedSites();
       showSuccess('Site unblocked successfully!');
+      
+      // Notify extension to sync
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to remove blocked site');
     } finally {
@@ -104,6 +112,10 @@ function BlockedSitesPage() {
       }
       await loadBlockedSites();
       showSuccess(`All ${category} sites blocked successfully!`);
+      
+      // Notify extension to sync
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to block category');
     } finally {
@@ -122,6 +134,10 @@ function BlockedSitesPage() {
       }
       await loadBlockedSites();
       showSuccess('Category unblocked successfully!');
+      
+      // Notify extension to sync
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to unblock category');
     } finally {

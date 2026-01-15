@@ -67,3 +67,19 @@ export function promptExtensionInstall() {
           '4. Select the extension folder');
   }
 }
+
+/**
+ * Notify extension to sync data from backend
+ * This is called when changes are made in the web app
+ */
+export function notifyExtensionSync(type = 'all') {
+  // Send message to extension content script to reload data
+  window.postMessage(
+    {
+      type: 'FOCUS_BLOCKER_SYNC_REQUEST',
+      syncType: type // 'all', 'blockedSites', 'timeLimits', 'schedules', 'customBlockPage', 'focusSession'
+    },
+    '*'
+  );
+  console.log(`🔄 Notified extension to sync: ${type}`);
+}

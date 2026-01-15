@@ -19,7 +19,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["pages/blocked.html", "pages/auth-bridge.html"],
+      "resources": ["pages/blocked.html", "pages/auth-bridge.html", "pages/frontend-viewer.html"],
       "matches": ["<all_urls>"]
     }
   ]

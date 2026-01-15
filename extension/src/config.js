@@ -2,6 +2,11 @@
 const API_BASE_URL = "http://localhost:5000/api";
 const FRONTEND_URL = "http://localhost:5173";
 
+// Expose FRONTEND_URL to window for access from other scripts
+if (typeof window !== 'undefined') {
+  window.FRONTEND_URL = FRONTEND_URL;
+}
+
 // API Endpoints
 const API_ENDPOINTS = {
   auth: {

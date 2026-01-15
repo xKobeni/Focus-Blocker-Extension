@@ -85,6 +85,9 @@ class UsageTracker {
     this.isTrackingEnabled = true;
     this.isWindowFocused = true;
     this.lastActiveTime = null;
+    this.isRateLimited = false;
+    this.rateLimitUntil = null;
+    this.syncRetryDelay = 60000; // Start with 60 second delay on rate limit
   }
 
   // Start tracking
@@ -158,10 +161,10 @@ class UsageTracker {
       this.updateActiveTabTime();
     }, 5000); // 5 seconds
 
-    // Start periodic sync (every 30 seconds)
+    // Start periodic sync (every 120 seconds / 2 minutes to avoid rate limiting)
     this.syncInterval = setInterval(() => {
       this.syncUsageToBackend();
-    }, 30000); // 30 seconds
+    }, 120000); // 120 seconds (2 minutes) - significantly reduced to avoid rate limiting
 
     // Sync on startup
     this.syncUsageToBackend();
@@ -519,6 +522,21 @@ class UsageTracker {
 
   // Sync usage data to backend and update time limits
   async syncUsageToBackend() {
+    // Check if we're rate limited
+    if (this.isRateLimited && this.rateLimitUntil) {
+      if (Date.now() < this.rateLimitUntil) {
+        // Still rate limited, skip this sync
+        const remainingSeconds = Math.ceil((this.rateLimitUntil - Date.now()) / 1000);
+        console.log(`📊 Rate limited, skipping usage sync. Retry in ${remainingSeconds}s`);
+        return;
+      } else {
+        // Rate limit expired, reset
+        this.isRateLimited = false;
+        this.rateLimitUntil = null;
+        this.syncRetryDelay = 60000; // Reset to initial delay
+      }
+    }
+
     if (this.pendingUsage.size === 0) return;
 
     // Save current active tab time before syncing
@@ -545,87 +563,138 @@ class UsageTracker {
 
         console.log(`📊 Syncing ${usageArray.length} usage records to backend`);
 
-        // Send each usage record and update time limits
+        let successCount = 0;
+        let rateLimited = false;
+
+        // Send each usage record and update time limits (with rate limit handling)
         for (const usage of usageArray) {
-        try {
-          if (typeof API_BASE_URL === 'undefined') {
-            console.error('❌ API_BASE_URL not defined');
-            return;
+          // Check rate limit before each request
+          if (this.isRateLimited && this.rateLimitUntil && Date.now() < this.rateLimitUntil) {
+            console.log(`📊 Rate limited, skipping remaining ${usageArray.length - successCount} usage records`);
+            rateLimited = true;
+            break;
           }
 
-          // Sync usage metric
-          const response = await fetch(`${API_BASE_URL}/usage-metrics`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${result.token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              userId: userId,
-              domain: usage.domain,
-              url: usage.url || `https://${usage.domain}`,
-              timeSpent: usage.timeSpent,
-              category: usage.category,
-              isBlocked: usage.isBlocked
-            })
-          });
+          try {
+            if (typeof API_BASE_URL === 'undefined') {
+              console.error('❌ API_BASE_URL not defined');
+              return;
+            }
 
-          if (response.ok) {
-            console.log(`✅ Synced usage for ${usage.domain} (${usage.timeSpent}s, ${usage.visitCount} visits)`);
-            
-            // Update time limit if this domain has one
-            if (result.timeLimits && result.timeLimits.length > 0) {
-              const timeLimit = result.timeLimits.find(limit => {
-                const limitDomain = limit.domain.replace(/^www\./, '').toLowerCase();
-                const cleanDomain = usage.domain.replace(/^www\./, '').toLowerCase();
-                return cleanDomain === limitDomain || 
-                       cleanDomain.endsWith('.' + limitDomain) ||
-                       limitDomain.endsWith('.' + cleanDomain);
-              });
+            // Sync usage metric
+            const response = await fetch(`${API_BASE_URL}/usage-metrics`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${result.token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                userId: userId,
+                domain: usage.domain,
+                url: usage.url || `https://${usage.domain}`,
+                timeSpent: usage.timeSpent,
+                category: usage.category,
+                isBlocked: usage.isBlocked
+              })
+            });
+
+            if (response.ok) {
+              console.log(`✅ Synced usage for ${usage.domain} (${usage.timeSpent}s, ${usage.visitCount} visits)`);
+              successCount++;
               
-              if (timeLimit && timeLimit._id) {
-                try {
-                  // Update time used for this time limit
-                  const timeLimitResponse = await fetch(`${API_BASE_URL}/time-limits/${timeLimit._id}/time-used`, {
-                    method: 'PUT',
-                    headers: {
-                      'Authorization': `Bearer ${result.token}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ timeUsed: usage.timeSpent })
-                  });
-                  
-                  if (timeLimitResponse.ok) {
-                    const updatedLimit = await timeLimitResponse.json();
-                    console.log(`⏱️ Updated time limit for ${usage.domain}: ${Math.round(updatedLimit.timeUsedToday / 60)}/${updatedLimit.dailyLimitMinutes} minutes`);
+              // Update time limit if this domain has one (skip if rate limited)
+              if (!rateLimited && result.timeLimits && result.timeLimits.length > 0) {
+                const timeLimit = result.timeLimits.find(limit => {
+                  const limitDomain = limit.domain.replace(/^www\./, '').toLowerCase();
+                  const cleanDomain = usage.domain.replace(/^www\./, '').toLowerCase();
+                  return cleanDomain === limitDomain || 
+                         cleanDomain.endsWith('.' + limitDomain) ||
+                         limitDomain.endsWith('.' + cleanDomain);
+                });
+                
+                if (timeLimit && timeLimit._id) {
+                  try {
+                    // Update time used for this time limit
+                    const timeLimitResponse = await fetch(`${API_BASE_URL}/time-limits/${timeLimit._id}/time-used`, {
+                      method: 'PUT',
+                      headers: {
+                        'Authorization': `Bearer ${result.token}`,
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({ timeUsed: usage.timeSpent })
+                    });
                     
-                    // Update local storage
-                    const updatedLimits = result.timeLimits.map(limit => 
-                      limit._id === timeLimit._id ? updatedLimit : limit
-                    );
-                    chrome.storage.local.set({ timeLimits: updatedLimits });
-                    
-                    // Reload time limits in manager if available
-                    if (self.timeLimitManager) {
-                      await self.timeLimitManager.loadTimeLimits();
+                    if (timeLimitResponse.ok) {
+                      const updatedLimit = await timeLimitResponse.json();
+                      console.log(`⏱️ Updated time limit for ${usage.domain}: ${Math.round(updatedLimit.timeUsedToday / 60)}/${updatedLimit.dailyLimitMinutes} minutes`);
+                      
+                      // Update local storage
+                      const updatedLimits = result.timeLimits.map(limit => 
+                        limit._id === timeLimit._id ? updatedLimit : limit
+                      );
+                      chrome.storage.local.set({ timeLimits: updatedLimits });
+                      
+                      // Reload time limits in manager if available
+                      if (self.timeLimitManager) {
+                        await self.timeLimitManager.loadTimeLimits();
+                      }
+                    } else if (timeLimitResponse.status === 429) {
+                      // Rate limited on time limit update, but don't break the loop
+                      console.warn(`⏱️ Rate limited when updating time limit for ${usage.domain}`);
+                    }
+                  } catch (error) {
+                    // Don't log rate limit errors as errors
+                    if (!error.message?.includes('429') && !error.message?.includes('Too many requests')) {
+                      console.error(`❌ Error updating time limit for ${usage.domain}:`, error);
                     }
                   }
-                } catch (error) {
-                  console.error(`❌ Error updating time limit for ${usage.domain}:`, error);
                 }
               }
+            } else if (response.status === 429) {
+              // Rate limited - set flag and calculate retry time
+              const errorData = await response.json().catch(() => ({}));
+              const retryAfter = errorData.retryAfter || this.syncRetryDelay;
+              
+              this.isRateLimited = true;
+              this.rateLimitUntil = Date.now() + retryAfter;
+              this.syncRetryDelay = Math.min(this.syncRetryDelay * 2, 300000); // Exponential backoff, max 5 minutes
+              
+              console.warn(`📊 Rate limited when syncing usage. Will retry after ${Math.ceil(retryAfter / 1000)}s`);
+              rateLimited = true;
+              break; // Stop syncing remaining records
+            } else {
+              const error = await response.json().catch(() => ({}));
+              // Only log non-rate-limit errors
+              if (response.status !== 429) {
+                console.error(`❌ Failed to sync usage for ${usage.domain}:`, error.message || 'Unknown error');
+              }
             }
-          } else {
-            const error = await response.json().catch(() => ({}));
-            console.error(`❌ Failed to sync usage for ${usage.domain}:`, error.message || 'Unknown error');
+          } catch (error) {
+            // Don't log rate limit errors as errors
+            if (!error.message?.includes('429') && !error.message?.includes('Too many requests')) {
+              console.error(`❌ Error syncing usage for ${usage.domain}:`, error.message || error);
+            }
           }
-        } catch (error) {
-          console.error(`❌ Error syncing usage for ${usage.domain}:`, error.message || error);
-        }
         }
 
-        // Clear pending usage after successful sync
-        this.pendingUsage.clear();
+        // Only clear successfully synced usage records
+        if (successCount > 0 && !rateLimited) {
+          // Clear all pending usage if all were synced successfully
+          this.pendingUsage.clear();
+          console.log(`✅ Successfully synced ${successCount} usage records`);
+        } else if (successCount > 0 && rateLimited) {
+          // Remove successfully synced records, keep the rest for next sync
+          const syncedDomains = new Set();
+          let removed = 0;
+          for (const [domain, usage] of this.pendingUsage.entries()) {
+            if (removed < successCount) {
+              syncedDomains.add(domain);
+              removed++;
+            }
+          }
+          syncedDomains.forEach(domain => this.pendingUsage.delete(domain));
+          console.log(`✅ Partially synced ${successCount} usage records, ${this.pendingUsage.size} remaining`);
+        }
       } catch (error) {
         console.error('📊 Error getting userId for usage sync:', error);
       }

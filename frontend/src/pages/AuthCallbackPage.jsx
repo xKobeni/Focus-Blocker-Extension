@@ -25,7 +25,7 @@ function AuthCallbackPage() {
         // Store token in localStorage
         localStorage.setItem('auth_token', token);
         
-        // Send token to extension
+        // Send token to extension (single send to avoid rate limiting)
         postTokenToExtension(token);
         console.log('✅ Token sent to extension (Google OAuth)');
         

@@ -42,9 +42,10 @@ function LoginPage() {
     try {
       await login({ email, password });
       
-      // Send token to extension
+      // Send token to extension (single send to avoid rate limiting)
       const token = getToken();
       if (token) {
+        // Send once - extension will request if needed
         postTokenToExtension(token);
         console.log('✅ Token sent to extension');
       }

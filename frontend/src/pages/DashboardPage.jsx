@@ -33,6 +33,73 @@ function DashboardPage() {
     }
   }, [user]);
 
+  // Periodically check for active session changes (every 30 seconds)
+  useEffect(() => {
+    if (!user?._id) return;
+
+    let sessionCheckInterval = null;
+    let timeoutId = null;
+
+    const checkActiveSession = async () => {
+      try {
+        const activeSessions = await getActiveFocusSessions(user._id);
+        const newActiveSession = activeSessions.length > 0 ? activeSessions[0] : null;
+        
+        // Use functional update to compare with current state
+        setActiveSession(prevSession => {
+          const prevId = prevSession?._id || prevSession?.id;
+          const newId = newActiveSession?._id || newActiveSession?.id;
+          
+          // Only update if session actually changed
+          if (prevId !== newId) {
+            // Reload dashboard data if session changed
+            setTimeout(() => {
+              loadDashboardData();
+            }, 500);
+            return newActiveSession;
+          }
+          return prevSession;
+        });
+      } catch (error) {
+        // Silently handle errors to avoid spam
+        if (!error.message?.includes('429') && !error.message?.includes('Too many requests')) {
+          console.warn('Failed to check active session:', error);
+        }
+      }
+    };
+
+    // Check after a short delay to avoid immediate rate limiting
+    timeoutId = setTimeout(checkActiveSession, 2000);
+
+    // Then check every 60 seconds (reduced frequency to avoid rate limiting)
+    sessionCheckInterval = setInterval(checkActiveSession, 60000);
+
+    // Also check when page becomes visible (user switches back to tab)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkActiveSession();
+      }
+    };
+
+    // Listen for localStorage changes (cross-tab sync)
+    const handleStorageChange = (e) => {
+      if (e.key === 'focus_session_changed' && user?._id) {
+        // Another tab changed the session, refresh immediately
+        checkActiveSession();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [user?._id]); // Only depend on user ID, not activeSession
+
   const loadDashboardData = async () => {
     if (!user?._id) return;
     
@@ -67,10 +134,38 @@ function DashboardPage() {
     try {
       const session = await createFocusSession(user._id);
       setActiveSession(session);
+      await fetchUser(); // Refresh user stats
       await loadDashboardData();
+      
+      // Notify extension to sync focus session
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('focusSession');
+      
+      // Notify other tabs/pages about session change
+      localStorage.setItem('focus_session_changed', Date.now().toString());
+      setTimeout(() => localStorage.removeItem('focus_session_changed'), 100);
+      
+      // Force a refresh check after a short delay to ensure sync
+      setTimeout(async () => {
+        try {
+          const activeSessions = await getActiveFocusSessions(user._id);
+          const newActiveSession = activeSessions.length > 0 ? activeSessions[0] : null;
+          if ((newActiveSession?._id || newActiveSession?.id) !== (session._id || session.id)) {
+            setActiveSession(newActiveSession);
+            await loadDashboardData();
+          }
+        } catch (err) {
+          // Ignore errors in refresh check
+        }
+      }, 2000);
     } catch (err) {
       console.error('Failed to start focus session:', err);
-      alert('Failed to start focus session: ' + err.message);
+      // Better error message for rate limiting
+      if (err.message?.includes('429') || err.message?.includes('Too many requests')) {
+        alert('Too many requests. Please wait a moment and try again.');
+      } else {
+        alert('Failed to start focus session: ' + err.message);
+      }
     }
   };
 
@@ -83,9 +178,36 @@ function DashboardPage() {
       // Refetch user to get updated XP, level, streak
       await fetchUser();
       await loadDashboardData();
+      
+      // Notify extension to sync focus session
+      const { notifyExtensionSync } = await import('../services/extensionService');
+      notifyExtensionSync('focusSession');
+      
+      // Notify other tabs/pages about session change
+      localStorage.setItem('focus_session_changed', Date.now().toString());
+      setTimeout(() => localStorage.removeItem('focus_session_changed'), 100);
+      
+      // Force a refresh check after a short delay to ensure sync
+      setTimeout(async () => {
+        try {
+          const activeSessions = await getActiveFocusSessions(user._id);
+          const newActiveSession = activeSessions.length > 0 ? activeSessions[0] : null;
+          setActiveSession(newActiveSession);
+          if (!newActiveSession) {
+            await loadDashboardData();
+          }
+        } catch (err) {
+          // Ignore errors in refresh check
+        }
+      }, 2000);
     } catch (err) {
       console.error('Failed to end focus session:', err);
-      alert('Failed to end focus session: ' + err.message);
+      // Better error message for rate limiting
+      if (err.message?.includes('429') || err.message?.includes('Too many requests')) {
+        alert('Too many requests. Please wait a moment and try again.');
+      } else {
+        alert('Failed to end focus session: ' + err.message);
+      }
     }
   };
 

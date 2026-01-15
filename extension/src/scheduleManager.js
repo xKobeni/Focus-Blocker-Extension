@@ -24,11 +24,25 @@ async function loadActiveSchedules() {
         });
 
         if (!userResponse.ok) {
+          // Handle rate limiting
+          if (userResponse.status === 429) {
+            console.warn("📅 Rate limited, skipping schedules load");
+            schedules = [];
+            resolve();
+            return;
+          }
           throw new Error("Failed to fetch user info");
         }
 
         const user = await userResponse.json();
         const userId = user._id || user.id;
+        
+        if (!userId) {
+          console.warn("⚠️ No user ID found");
+          schedules = [];
+          resolve();
+          return;
+        }
 
         // Get active schedules
         const response = await fetch(`${API_BASE_URL}/schedules/user/${userId}/active`, {
@@ -74,7 +88,7 @@ function checkActiveSchedule() {
 }
 
 // Check if a domain should be blocked based on active schedules
-function shouldBlockBySchedule(domain) {
+function shouldBlockBySchedule(domain, blockedSitesList = []) {
   const activeSchedules = checkActiveSchedule();
   
   if (activeSchedules.length === 0) return false;
@@ -83,19 +97,22 @@ function shouldBlockBySchedule(domain) {
   
   for (const schedule of activeSchedules) {
     if (schedule.action === 'block_all') {
-      return true; // Block all sites
-    }
-    
-    if (schedule.action === 'block_categories' && schedule.categories) {
-      // Check if domain matches any category (would need category mapping)
-      // For now, if categories are specified, block
+      // Only block_all schedules block everything
       return true;
     }
     
-    if (schedule.action === 'block_sites' && schedule.siteIds) {
+    // For other schedule actions, only block if domain is in blocked sites list
+    if (schedule.action === 'block_categories' || schedule.action === 'block_sites') {
       // Check if domain is in the blocked sites list
-      // This would require loading the sites from siteIds
-      return true; // Simplified for now
+      const isInBlockedList = blockedSitesList.some(blocked => {
+        const cleanBlocked = blocked.replace(/^www\./, '').toLowerCase();
+        return cleanDomain === cleanBlocked || 
+               cleanDomain.endsWith('.' + cleanBlocked) ||
+               cleanBlocked.endsWith('.' + cleanDomain);
+      });
+      
+      // Only block if site is actually in blocked list
+      return isInBlockedList;
     }
   }
   

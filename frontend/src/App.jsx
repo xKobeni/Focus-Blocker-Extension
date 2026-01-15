@@ -15,6 +15,7 @@ import SchedulePage from './pages/SchedulePage.jsx';
 import CustomBlockPagePage from './pages/CustomBlockPagePage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import AuthCallbackPage from './pages/AuthCallbackPage.jsx';
+import PopupPage from './pages/PopupPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import useAuthStore from './stores/authStore';
 import { getToken } from './services/authService';
@@ -23,15 +24,32 @@ import { postTokenToExtension } from './services/extensionService';
 function AppRoutes() {
   const { isAuthenticated } = useAuthStore();
   
-  // Sync token with extension on app load/mount
+  // Sync token with extension on app load/mount (minimal frequency to avoid rate limiting)
   useEffect(() => {
-    if (isAuthenticated) {
-      const token = getToken();
-      if (token) {
-        postTokenToExtension(token);
-        console.log('🔄 Auto-syncing token with extension on app load');
-      }
-    }
+    if (!isAuthenticated) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    // Function to send token
+    const sendToken = () => {
+      postTokenToExtension(token);
+      console.log('🔄 Auto-syncing token with extension');
+    };
+
+    // Send immediately
+    sendToken();
+
+    // Send once after a delay to ensure content script is ready
+    const timeout = setTimeout(sendToken, 2000);
+
+    // Only send one more time after 30 seconds (total: 3 calls max)
+    const finalTimeout = setTimeout(sendToken, 30000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearTimeout(finalTimeout);
+    };
   }, [isAuthenticated]);
 
   // Listen for token requests from extension
@@ -46,6 +64,7 @@ function AppRoutes() {
         if (token) {
           postTokenToExtension(token);
           console.log('✅ Token sent to extension (requested)');
+          // Removed automatic retry to reduce API calls
         } else {
           console.log('❌ No token available to send');
         }
@@ -70,6 +89,8 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      {/* Extension popup route - public, handles auth internally */}
+      <Route path="/popup" element={<PopupPage />} />
         
         {/* Protected routes */}
         <Route

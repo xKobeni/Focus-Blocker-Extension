@@ -24,11 +24,25 @@ async function loadTimeLimits() {
         });
 
         if (!userResponse.ok) {
+          // Handle rate limiting
+          if (userResponse.status === 429) {
+            console.warn("⏱️ Rate limited, skipping time limits load");
+            timeLimits = [];
+            resolve();
+            return;
+          }
           throw new Error("Failed to fetch user info");
         }
 
         const user = await userResponse.json();
         const userId = user._id || user.id;
+        
+        if (!userId) {
+          console.warn("⚠️ No user ID found");
+          timeLimits = [];
+          resolve();
+          return;
+        }
 
         // Get time limits
         const response = await fetch(`${API_BASE_URL}/time-limits/user/${userId}`, {

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Frontend Viewer - Focus Blocker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+      background: #0f172a; /* slate-950 */
+      color: #f1f5f9; /* slate-100 */
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      background: #1e293b; /* slate-800 */
+      padding: 12px 16px;
+      border-bottom: 1px solid #334155; /* slate-700 */
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-title .icon {
+      color: #34d399; /* emerald-400 */
+    }
+
+    .close-btn {
+      background: #334155; /* slate-700 */
+      border: 1px solid #475569; /* slate-600 */
+      color: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: #475569;
+    }
+
+    iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: white;
+    }
+
+    .error-message {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .error-message h2 {
+      color: #f1f5f9;
+      font-size: 18px;
+    }
+
+    .error-message p {
+      color: #94a3b8; /* slate-400 */
+      font-size: 14px;
+    }
+
+    .error-message .btn {
+      background: #10b981; /* emerald-600 */
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .error-message .btn:hover {
+      background: #059669; /* emerald-500 */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-title">
+        <span class="icon">🛡️</span>
+        <span>AI Focus Blocker</span>
+      </div>
+      <button class="close-btn" onclick="window.close()">Close</button>
+    </div>
+    
+    <iframe id="frontendFrame" src=""></iframe>
+    
+    <div id="errorMessage" class="error-message" style="display: none;">
+      <h2>Unable to load frontend</h2>
+      <p id="errorText">The frontend application is not running or not accessible.</p>
+      <button class="btn" onclick="retryLoad()">Retry</button>
+      <button class="btn" onclick="window.close()" style="background: #334155; margin-top: 8px;">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // Get the route from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const route = urlParams.get('route') || '/login';
+    const FRONTEND_URL = 'http://localhost:5173';
+    
+    const frame = document.getElementById('frontendFrame');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    function loadFrontend() {
+      try {
+        frame.src = FRONTEND_URL + route;
+        
+        // Listen for iframe load
+        frame.onload = () => {
+          console.log('✅ Frontend loaded in iframe');
+          errorMessage.style.display = 'none';
+          frame.style.display = 'block';
+          
+          // Send message to iframe that we're ready
+          try {
+            frame.contentWindow.postMessage({ type: 'FOCUS_BLOCKER_VIEWER_READY' }, FRONTEND_URL);
+          } catch (e) {
+            // Cross-origin, ignore
+          }
+        };
+        
+        // Handle iframe errors
+        frame.onerror = () => {
+          showError('Failed to load frontend page');
+        };
+        
+        // Timeout check
+        setTimeout(() => {
+          try {
+            // Try to access iframe content to check if it loaded
+            if (!frame.contentWindow || frame.contentWindow.location.href === 'about:blank') {
+              showError('Frontend page did not load. Make sure the frontend is running at ' + FRONTEND_URL);
+            }
+          } catch (e) {
+            // Cross-origin, can't check - assume it's loading
+          }
+        }, 3000);
+        
+      } catch (error) {
+        showError('Error loading frontend: ' + error.message);
+      }
+    }
+    
+    function showError(message) {
+      document.getElementById('errorText').textContent = message;
+      errorMessage.style.display = 'flex';
+      frame.style.display = 'none';
+    }
+    
+    function retryLoad() {
+      errorMessage.style.display = 'none';
+      frame.style.display = 'block';
+      loadFrontend();
+    }
+    
+    // Listen for messages from iframe (for token sync, etc.)
+    window.addEventListener('message', (event) => {
+      // Only accept messages from frontend origin
+      if (event.origin !== FRONTEND_URL.replace(/\/$/, '')) return;
+      
+      if (event.data.type === 'FOCUS_BLOCKER_AUTH' && event.data.token) {
+        // Token received from frontend, forward to extension
+        chrome.storage.local.set({ token: event.data.token }, () => {
+          console.log('✅ Token saved from frontend viewer');
+          // Notify background script
+          chrome.runtime.sendMessage({ action: 'reloadBlockedSites' });
+        });
+      }
+    });
+    
+    // Start loading
+    loadFrontend();
+  </script>
+</body>
+</html>

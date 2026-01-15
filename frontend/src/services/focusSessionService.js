@@ -43,6 +43,10 @@ export async function getActiveFocusSessions(userId) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // Handle rate limiting specifically
+    if (response.status === 429) {
+      throw new Error('Too many requests, please try again later');
+    }
     throw new Error(data?.message || 'Failed to fetch active sessions');
   }
 
@@ -72,6 +76,10 @@ export async function createFocusSession(userId) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // Handle rate limiting specifically
+    if (response.status === 429) {
+      throw new Error('Too many requests, please try again later');
+    }
     throw new Error(data?.message || 'Failed to create focus session');
   }
 

@@ -59,26 +59,60 @@ async function requestTokenFromFrontend() {
       console.log("📡 Frontend tab found, requesting token...");
       
       // Send message to content script on frontend tab
-      chrome.tabs.sendMessage(tabs[0].id, { action: "requestTokenFromFrontend" });
-      
-      // Wait a bit for the token to arrive
-      setTimeout(() => {
-        getToken(async (token) => {
-          if (token) {
-            try {
-              const user = await getCurrentUser();
-              showControls(user.name || user.email);
-              console.log("✅ Successfully synced with frontend!");
-            } catch (error) {
-              console.error("Token verification failed:", error);
-              showAuth();
-            }
-          } else {
-            console.log("❌ No token received from frontend");
+      chrome.tabs.sendMessage(
+        tabs[0].id,
+        { action: "requestTokenFromFrontend" },
+        () => {
+          // If there's no content script in that tab, Chrome will set lastError
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "⚠️ Could not reach content script in frontend tab:",
+              chrome.runtime.lastError.message
+            );
+            // Fall back to showing auth UI
+            hideLoading();
             showAuth();
+            return;
           }
-        });
-      }, 1000);
+
+          // Wait a bit for the token to arrive in extension storage
+          // Try multiple times with increasing delays (more attempts for reliability)
+          let attempts = 0;
+          const maxAttempts = 6; // Increased from 3 to 6
+          
+          const checkForToken = () => {
+            attempts++;
+            console.log(`🔍 Checking for token (attempt ${attempts}/${maxAttempts})...`);
+            getToken(async (token) => {
+              if (token) {
+                try {
+                  const user = await getCurrentUser();
+                  hideLoading();
+                  showControls(user.name || user.email);
+                  console.log("✅ Successfully synced with frontend!");
+                } catch (error) {
+                  console.error("Token verification failed:", error);
+                  hideLoading();
+                  showAuth();
+                }
+              } else if (attempts < maxAttempts) {
+                // Retry after a delay (longer delays for later attempts)
+                const delay = attempts < 3 ? 500 * attempts : 1000 * (attempts - 2);
+                console.log(`⏳ No token yet, retrying in ${delay}ms...`);
+                setTimeout(checkForToken, delay);
+              } else {
+                console.log("❌ No token received from frontend after", maxAttempts, "attempts");
+                console.log("💡 Tip: Make sure you're logged in on the frontend and the page is loaded");
+                hideLoading();
+                showAuth();
+              }
+            });
+          };
+          
+          // Start checking after initial delay
+          setTimeout(checkForToken, 300);
+        }
+      );
     } else {
       console.log("ℹ️ Frontend not open, showing login");
       showAuth();
@@ -94,6 +128,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "tokenUpdated" && message.token) {
     console.log("🔄 Token updated, refreshing popup...");
     initializePopup();
+  }
+});
+
+// Listen for storage changes (session started/ended from web)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.activeSessionId) {
+    const newSessionId = changes.activeSessionId.newValue;
+    const oldSessionId = changes.activeSessionId.oldValue;
+    
+    console.log('🔄 Session storage changed:', { oldSessionId, newSessionId });
+    
+    if (newSessionId && !oldSessionId) {
+      // Session started
+      currentSessionId = newSessionId;
+      updateSessionStatus(true);
+      console.log('✅ Session started (detected from storage):', newSessionId);
+    } else if (!newSessionId && oldSessionId) {
+      // Session ended
+      currentSessionId = null;
+      updateSessionStatus(false);
+      loadGamificationStats(); // Refresh stats
+      console.log('✅ Session ended (detected from storage)');
+    } else if (newSessionId !== oldSessionId) {
+      // Session changed
+      currentSessionId = newSessionId;
+      updateSessionStatus(!!newSessionId);
+      console.log('🔄 Session changed (detected from storage):', newSessionId);
+    }
   }
 });
 
@@ -114,15 +176,8 @@ async function showControls(name) {
   // Load user gamification stats
   await loadGamificationStats();
   
-  // Check if there's an active session
-  chrome.storage.local.get("activeSessionId", (result) => {
-    if (result.activeSessionId) {
-      currentSessionId = result.activeSessionId;
-      updateSessionStatus(true);
-    } else {
-      updateSessionStatus(false);
-    }
-  });
+  // Check for active session from backend (most reliable source)
+  await checkActiveSessionFromBackend();
 }
 
 // Update session status display
@@ -145,6 +200,55 @@ function updateSessionStatus(isActive) {
     }
     startBtn.style.display = "flex";
     stopBtn.style.display = "none";
+  }
+}
+
+// Check for active session from backend
+async function checkActiveSessionFromBackend() {
+  try {
+    const user = await getCurrentUser();
+    const userId = user._id || user.id;
+    
+    if (!userId) {
+      console.warn("No user ID found");
+      updateSessionStatus(false);
+      return;
+    }
+    
+    // Get active sessions from backend
+    const activeSessions = await getActiveFocusSessions(userId);
+    
+    if (activeSessions && activeSessions.length > 0) {
+      const session = activeSessions[0];
+      currentSessionId = session._id || session.id;
+      
+      // Store in chrome.storage for background script
+      chrome.storage.local.set({ activeSessionId: currentSessionId }, () => {
+        console.log("✅ Active session found from backend:", currentSessionId);
+        updateSessionStatus(true);
+        
+        // Notify background script to start blocking if not already
+        chrome.runtime.sendMessage({ action: "startBlocking" });
+      });
+    } else {
+      // No active session found
+      currentSessionId = null;
+      chrome.storage.local.remove("activeSessionId", () => {
+        console.log("ℹ️ No active session found in backend");
+        updateSessionStatus(false);
+      });
+    }
+  } catch (error) {
+    console.error("Failed to check active session:", error);
+    // Fallback to local storage
+    chrome.storage.local.get("activeSessionId", (result) => {
+      if (result.activeSessionId) {
+        currentSessionId = result.activeSessionId;
+        updateSessionStatus(true);
+      } else {
+        updateSessionStatus(false);
+      }
+    });
   }
 }
 
@@ -174,7 +278,12 @@ async function loadGamificationStats() {
 
 // Login opens web page
 loginBtn.onclick = () => {
+  // Option 1: Open frontend directly in new tab (default)
   chrome.tabs.create({ url: FRONTEND_URL + "/login" });
+  
+  // Option 2: Open frontend in extension viewer page (uncomment to use)
+  // const viewerUrl = chrome.runtime.getURL(`pages/frontend-viewer.html?route=/login`);
+  // chrome.tabs.create({ url: viewerUrl });
 };
 
 // Logout
@@ -193,6 +302,36 @@ logoutBtn.onclick = () => {
   chrome.runtime.sendMessage({ action: "stopBlocking" });
 };
 
+// Helper function to get active sessions from backend
+async function getActiveFocusSessions(userId) {
+  return new Promise((resolve, reject) => {
+    getToken(async (token) => {
+      if (!token) {
+        reject(new Error("No authentication token"));
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/focus-sessions/user/${userId}/active`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch active sessions");
+        }
+        
+        const sessions = await response.json();
+        resolve(sessions);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
 // Start Focus Session
 startBtn.onclick = async () => {
   try {
@@ -208,6 +347,9 @@ startBtn.onclick = async () => {
     // Notify background script to start blocking
     chrome.runtime.sendMessage({ action: "startBlocking" });
     
+    // Notify web frontend about session start (if open)
+    notifyWebFrontend("SESSION_STARTED", { sessionId: currentSessionId });
+    
   } catch (error) {
     console.error("Failed to start focus session:", error);
     statusText.textContent = "❌ Failed to start";
@@ -215,6 +357,28 @@ startBtn.onclick = async () => {
     alert("Failed to start focus session: " + error.message);
   }
 };
+
+// Helper function to notify web frontend about session changes
+function notifyWebFrontend(action, data = {}) {
+  // Query for frontend tabs and send message
+  chrome.tabs.query({ url: `${FRONTEND_URL}/*` }, (tabs) => {
+    if (tabs && tabs.length > 0) {
+      tabs.forEach((tab) => {
+        chrome.tabs.sendMessage(tab.id, {
+          action: "extensionSessionUpdate",
+          type: action,
+          ...data
+        }, () => {
+          if (chrome.runtime.lastError) {
+            console.debug("Could not notify frontend tab:", chrome.runtime.lastError.message);
+          } else {
+            console.log(`✅ Notified frontend about ${action}`);
+          }
+        });
+      });
+    }
+  });
+}
 
 // Stop Focus Session
 stopBtn.onclick = async () => {
@@ -248,6 +412,9 @@ stopBtn.onclick = async () => {
       
       // Notify background script to stop blocking
       chrome.runtime.sendMessage({ action: "stopBlocking" });
+      
+      // Notify web frontend about session end
+      notifyWebFrontend("SESSION_ENDED");
     });
     
   } catch (error) {
@@ -258,5 +425,61 @@ stopBtn.onclick = async () => {
   }
 };
 
+// Periodically check session status to keep in sync with backend
+let sessionCheckInterval = null;
+
+function startSessionMonitoring() {
+  // Clear existing interval if any
+  if (sessionCheckInterval) {
+    clearInterval(sessionCheckInterval);
+  }
+  
+  // Check session status every 30 seconds
+  sessionCheckInterval = setInterval(() => {
+    getToken(async (token) => {
+      if (token) {
+        try {
+          const user = await getCurrentUser();
+          const userId = user._id || user.id;
+          
+          if (userId) {
+            const activeSessions = await getActiveFocusSessions(userId);
+            const backendSessionId = activeSessions.length > 0 ? (activeSessions[0]._id || activeSessions[0].id) : null;
+            
+            // Check if session state has changed
+            if (backendSessionId && !currentSessionId) {
+              // Session started elsewhere
+              console.log('🔄 Session detected from backend:', backendSessionId);
+              currentSessionId = backendSessionId;
+              chrome.storage.local.set({ activeSessionId: currentSessionId });
+              updateSessionStatus(true);
+              chrome.runtime.sendMessage({ action: "startBlocking" });
+            } else if (!backendSessionId && currentSessionId) {
+              // Session ended elsewhere
+              console.log('🔄 Session ended detected from backend');
+              currentSessionId = null;
+              chrome.storage.local.remove("activeSessionId");
+              updateSessionStatus(false);
+              chrome.runtime.sendMessage({ action: "stopBlocking" });
+              loadGamificationStats(); // Refresh stats
+            }
+          }
+        } catch (error) {
+          console.debug('Session monitoring check failed:', error.message);
+        }
+      }
+    });
+  }, 30000); // Check every 30 seconds
+}
+
 // Initialize when popup opens
 initializePopup();
+
+// Start session monitoring after initialization
+setTimeout(() => {
+  getToken((token) => {
+    if (token) {
+      startSessionMonitoring();
+    }
+  });
+}, 2000);

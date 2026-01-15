@@ -6,17 +6,34 @@ let overlayInjected = false;
 
 // Helper function to check if a domain is blocked (improved matching)
 function isDomainBlocked(domain) {
-  if (!blockedSites || blockedSites.length === 0) return false;
+  // CRITICAL: If no blocked sites, nothing is blocked
+  if (!blockedSites || blockedSites.length === 0) {
+    return false;
+  }
+  
+  // If domain is empty or invalid, don't block
+  if (!domain || typeof domain !== 'string') {
+    return false;
+  }
   
   const cleanDomain = domain.replace(/^www\./, '').toLowerCase();
   
-  return blockedSites.some(blocked => {
+  const isBlocked = blockedSites.some(blocked => {
+    if (!blocked || typeof blocked !== 'string') return false;
     const cleanBlocked = blocked.replace(/^www\./, '').toLowerCase();
     // Exact match or domain ends with blocked domain (e.g., facebook.com matches m.facebook.com)
     return cleanDomain === cleanBlocked || 
            cleanDomain.endsWith('.' + cleanBlocked) ||
            cleanBlocked.endsWith('.' + cleanDomain);
   });
+  
+  if (isBlocked) {
+    console.log(`🔍 Domain ${domain} IS in blocked list`);
+  } else {
+    console.log(`🔍 Domain ${domain} is NOT in blocked list (blocked sites: ${blockedSites.join(', ')})`);
+  }
+  
+  return isBlocked;
 }
 
 // Check if current site should be blocked and inject overlay if needed
@@ -32,6 +49,16 @@ async function checkAndBlockCurrentSite() {
     return;
   }
   
+  // Skip file:// pages (local files)
+  if (window.location.href.startsWith('file://')) {
+    return;
+  }
+  
+  // Skip about: pages
+  if (window.location.href.startsWith('about:')) {
+    return;
+  }
+  
   // If we're on blocked.html, it will load custom settings itself
   if (window.location.href.includes('blocked.html')) {
     return;
@@ -39,12 +66,88 @@ async function checkAndBlockCurrentSite() {
 
   try {
     const currentUrl = window.location.href;
-    const urlObj = new URL(currentUrl);
+    
+    // Skip invalid URLs
+    if (!currentUrl || currentUrl.trim() === '') {
+      return;
+    }
+    
+    let urlObj;
+    try {
+      urlObj = new URL(currentUrl);
+    } catch (e) {
+      // Invalid URL, skip blocking
+      console.debug('Invalid URL, skipping:', currentUrl);
+      return;
+    }
+    
     const domain = urlObj.hostname;
+    
+    // CRITICAL: Skip localhost, 127.0.0.1, and other local addresses
+    if (!domain || 
+        domain === 'localhost' || 
+        domain === '127.0.0.1' || 
+        domain === '0.0.0.0' ||
+        domain.startsWith('192.168.') ||
+        domain.startsWith('10.') ||
+        domain.startsWith('172.16.') ||
+        domain.startsWith('172.17.') ||
+        domain.startsWith('172.18.') ||
+        domain.startsWith('172.19.') ||
+        domain.startsWith('172.20.') ||
+        domain.startsWith('172.21.') ||
+        domain.startsWith('172.22.') ||
+        domain.startsWith('172.23.') ||
+        domain.startsWith('172.24.') ||
+        domain.startsWith('172.25.') ||
+        domain.startsWith('172.26.') ||
+        domain.startsWith('172.27.') ||
+        domain.startsWith('172.28.') ||
+        domain.startsWith('172.29.') ||
+        domain.startsWith('172.30.') ||
+        domain.startsWith('172.31.') ||
+        domain.endsWith('.local')) {
+      console.log(`✅ Skipping local/system domain: ${domain}`);
+      removeOverlay();
+      restorePageInteraction();
+      return;
+    }
+    
     const cleanDomain = domain.replace(/^www\./, '');
 
+    // CRITICAL: Double-check that we have an active session before blocking
+    // This prevents blocking when no session is active
+    const hasActiveSession = await new Promise((resolve) => {
+      chrome.storage.local.get(['activeSessionId'], (result) => {
+        resolve(!!result.activeSessionId);
+      });
+    });
+    
+    // If no active session, don't block anything
+    if (!hasActiveSession) {
+      removeOverlay();
+      restorePageInteraction();
+      return;
+    }
+    
+    // If blocking is not active, don't block anything
+    if (!isBlockingActive) {
+      removeOverlay();
+      restorePageInteraction();
+      return;
+    }
+    
     // Check if site is blocked using improved matching
     const isBlocked = isDomainBlocked(domain);
+    
+    // SAFETY CHECK: Log blocking state for debugging
+    console.log(`🔍 Pre-check for ${domain}:`, {
+      blockedSitesCount: blockedSites.length,
+      blockedSitesList: blockedSites,
+      isBlocked: isBlocked,
+      hasActiveSession: hasActiveSession,
+      isBlockingActive: isBlockingActive
+    });
     
     // Check time limits and schedules asynchronously
     const timeLimitInfo = await new Promise((resolve) => {
@@ -78,47 +181,104 @@ async function checkAndBlockCurrentSite() {
       });
     });
     
-    // Check schedules
+    // Check schedules - IMPORTANT: Only block if schedule applies AND site is actually blocked
     const scheduleBlocked = await new Promise((resolve) => {
-      chrome.storage.local.get(['activeSchedules'], (result) => {
+      chrome.storage.local.get(['activeSchedules', 'blockedSites'], (result) => {
         if (result.activeSchedules && result.activeSchedules.length > 0) {
           const now = new Date();
           const currentDay = now.getDay();
           const currentTime = now.toTimeString().slice(0, 5);
           
-          const blocked = result.activeSchedules.some(schedule => {
-            const matchesDay = schedule.daysOfWeek.includes(currentDay);
-            const matchesTime = currentTime >= schedule.startTime && currentTime <= schedule.endTime;
+          // Check if any active schedule applies to this site
+          const activeSchedule = result.activeSchedules.find(schedule => {
+            const matchesDay = schedule.daysOfWeek && schedule.daysOfWeek.includes(currentDay);
+            const matchesTime = schedule.startTime && schedule.endTime && 
+                               currentTime >= schedule.startTime && currentTime <= schedule.endTime;
             
-            if (matchesDay && matchesTime) {
-              if (schedule.action === 'block_all') return true;
-              // Add more schedule logic here
-            }
-            return false;
+            return matchesDay && matchesTime;
           });
           
-          resolve(blocked);
+          if (activeSchedule) {
+            // Only block_all schedules block everything
+            if (activeSchedule.action === 'block_all') {
+              console.log(`📅 Schedule active (block_all): blocking all sites`);
+              resolve(true);
+              return;
+            }
+            
+            // For other schedule actions, ONLY block if site is in blocked list
+            if (isBlocked) {
+              console.log(`📅 Schedule active: blocking ${domain} (site is in blocked list)`);
+              resolve(true);
+              return;
+            } else {
+              console.log(`📅 Schedule active but ${domain} is not in blocked list - allowing`);
+              resolve(false);
+              return;
+            }
+          }
+          
+          resolve(false);
         } else {
           resolve(false);
         }
       });
     });
 
-    // CRITICAL: Double-check that we have an active session before blocking
-    // This prevents blocking when no session is active
-    const hasActiveSession = await new Promise((resolve) => {
-      chrome.storage.local.get(['activeSessionId'], (result) => {
-        resolve(!!result.activeSessionId);
-      });
+    // CRITICAL BLOCKING LOGIC:
+    // We ONLY block if ALL of these are true:
+    // 1. There's an active session
+    // 2. Blocking is enabled
+    // 3. The site is ACTUALLY in the blocked list OR time limit exceeded OR block_all schedule is active
+    
+    // CRITICAL SAFETY CHECK: If we have NO blocked sites, NO time limits, and NO schedules, never block
+    const hasAnyBlockingRules = blockedSites.length > 0 || 
+                                 (timeLimitInfo !== null) || 
+                                 scheduleBlocked;
+    
+    if (!hasAnyBlockingRules) {
+      console.log(`⚠️ SAFETY: No blocking rules configured - allowing ${domain}`);
+      removeOverlay();
+      restorePageInteraction();
+      return;
+    }
+    
+    // First, check if we should block at all
+    const hasReasonToBlock = isBlocked || (timeLimitInfo && timeLimitInfo.isExceeded) || scheduleBlocked;
+    
+    // Log the blocking decision with full details
+    console.log(`🔍 Blocking check for ${domain}:`, {
+      hasActiveSession,
+      isBlockingActive,
+      isBlocked,
+      timeLimitExceeded: !!(timeLimitInfo && timeLimitInfo.isExceeded),
+      scheduleBlocked,
+      hasReasonToBlock,
+      blockedSitesCount: blockedSites.length,
+      blockedSites: blockedSites
     });
     
-    // Block ONLY if: session is active AND (blocked site OR time limit exceeded OR schedule active)
-    const shouldBlock = hasActiveSession && isBlockingActive && (isBlocked || (timeLimitInfo && timeLimitInfo.isExceeded) || scheduleBlocked);
-
+    // CRITICAL: If site is NOT blocked and no time limit/schedule applies, NEVER block
+    if (!hasReasonToBlock) {
+      console.log(`✅ ALLOWING ${domain} - not in blocked list, no time limit exceeded, no block_all schedule active`);
+      removeOverlay();
+      restorePageInteraction();
+      return;
+    }
+    
+    // Only block if we have an active session AND blocking is enabled AND we have a reason to block
+    const shouldBlock = hasActiveSession && isBlockingActive && hasReasonToBlock;
+    
     if (shouldBlock) {
+      // Log why we're blocking
+      const reasons = [];
+      if (isBlocked) reasons.push('in blocked list');
+      if (timeLimitInfo && timeLimitInfo.isExceeded) reasons.push('time limit exceeded');
+      if (scheduleBlocked) reasons.push('block_all schedule active');
+      console.log(`🚫 BLOCKING ${domain} because: ${reasons.join(', ')}`);
+      
       if (!overlayInjected) {
         const reason = scheduleBlocked ? 'schedule' : (timeLimitInfo && timeLimitInfo.isExceeded ? 'time limit' : 'blocked site');
-        console.log(`🚫 Content script: Blocking ${domain} (reason: ${reason}, session active: ${hasActiveSession})`);
         await injectOverlay(timeLimitInfo);
       }
       // Prevent any navigation
@@ -126,13 +286,16 @@ async function checkAndBlockCurrentSite() {
     } else {
       // Always remove overlay if we shouldn't block
       if (overlayInjected) {
-        console.log(`✅ Content script: Not blocking ${domain} (isBlockingActive: ${isBlockingActive}, hasActiveSession: ${hasActiveSession})`);
+        console.log(`✅ REMOVING BLOCK for ${domain} - shouldBlock is false`);
       }
       removeOverlay();
       restorePageInteraction();
     }
   } catch (error) {
     console.error("Error checking current site:", error);
+    // On error, don't block - allow the page to load
+    removeOverlay();
+    restorePageInteraction();
   }
 }
 
@@ -475,15 +638,48 @@ function preventNavigation(e) {
 async function loadBlockingState() {
   return new Promise((resolve) => {
     chrome.storage.local.get(['isBlocking', 'blockedSites', 'activeSessionId', 'customBlockPage', 'timeLimits', 'activeSchedules'], (result) => {
-      isBlockingActive = result.isBlocking === true && !!result.activeSessionId;
+      // CRITICAL: Only activate blocking if:
+      // 1. Blocking is enabled in background script
+      // 2. There's an active session
+      // 3. We have at least some blocked sites, time limits, or schedules configured
+      const hasBlockedSites = (result.blockedSites && result.blockedSites.length > 0);
+      const hasTimeLimits = (result.timeLimits && result.timeLimits.length > 0);
+      const hasSchedules = (result.activeSchedules && result.activeSchedules.length > 0);
+      const hasActiveSession = !!result.activeSessionId;
+      
       blockedSites = result.blockedSites || [];
+      
+      // CRITICAL: Only activate blocking if we have an active session AND blocking is enabled AND we have something to block
+      // If any of these conditions are false, blocking should be disabled
+      isBlockingActive = result.isBlocking === true && 
+                        hasActiveSession && 
+                        (hasBlockedSites || hasTimeLimits || hasSchedules);
+      
       console.log('📋 Content script: Blocking state loaded', {
-        isBlocking: isBlockingActive,
+        isBlocking: result.isBlocking,
+        isBlockingActive: isBlockingActive,
         blockedSitesCount: blockedSites.length,
+        blockedSites: blockedSites,
+        hasActiveSession: hasActiveSession,
+        hasTimeLimits: hasTimeLimits,
+        hasSchedules: hasSchedules,
         hasCustomBlockPage: !!result.customBlockPage,
-        timeLimitsCount: result.timeLimits?.length || 0,
-        activeSchedulesCount: result.activeSchedules?.length || 0
+        willBlock: isBlockingActive && hasBlockedSites ? 'Only blocked sites' : (isBlockingActive ? 'Time limits/schedules' : 'Nothing - blocking disabled')
       });
+      
+      // If no blocked sites and no time limits/schedules, make sure we're not blocking
+      if (!hasBlockedSites && !hasTimeLimits && !hasSchedules) {
+        isBlockingActive = false;
+        console.log('⚠️ CRITICAL: No blocked sites, time limits, or schedules - FORCING blocking to disabled');
+        removeOverlay();
+        restorePageInteraction();
+      }
+      
+      // If we have blocked sites, log them for debugging
+      if (hasBlockedSites) {
+        console.log('📋 Blocked sites list:', blockedSites);
+      }
+      
       resolve();
     });
   });
@@ -532,6 +728,91 @@ function initializeContentScript() {
 // Start initialization
 initializeContentScript();
 
+// Listen for storage changes to sync across tabs in real-time
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local') {
+    // Reload blocking state when relevant data changes
+    if (changes.isBlocking || changes.blockedSites || changes.activeSessionId || 
+        changes.timeLimits || changes.activeSchedules || changes.customBlockPage) {
+      console.log('🔄 Storage changed, reloading blocking state...', Object.keys(changes));
+      loadBlockingState().then(() => {
+        // Re-check current site after state reload
+        checkAndBlockCurrentSite();
+      });
+    }
+  }
+});
+
+// Helper function to get token from page's localStorage (injected script)
+function getTokenFromPageStorage() {
+  return new Promise((resolve) => {
+    // Inject a script into the page context to access localStorage
+    const script = document.createElement('script');
+    script.textContent = `
+      (function() {
+        try {
+          const token = localStorage.getItem('auth_token');
+          window.postMessage({ 
+            type: 'FOCUS_BLOCKER_TOKEN_FROM_STORAGE', 
+            token: token 
+          }, '*');
+        } catch (e) {
+          window.postMessage({ 
+            type: 'FOCUS_BLOCKER_TOKEN_FROM_STORAGE', 
+            token: null 
+          }, '*');
+        }
+      })();
+    `;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+    
+    // Listen for the response
+    const listener = (event) => {
+      if (event.source !== window) return;
+      if (event.data.type === 'FOCUS_BLOCKER_TOKEN_FROM_STORAGE') {
+        window.removeEventListener('message', listener);
+        resolve(event.data.token);
+      }
+    };
+    window.addEventListener('message', listener);
+    
+    // Timeout after 1 second
+    setTimeout(() => {
+      window.removeEventListener('message', listener);
+      resolve(null);
+    }, 1000);
+  });
+}
+
+// Helper function to save token and notify extension components
+function saveTokenToExtension(token) {
+  if (!token) return;
+  
+  console.log("💾 Saving token to extension storage...");
+  chrome.storage.local.set({ token: token }, () => {
+    console.log("✅ Token saved to extension storage");
+    
+    // Notify background script to reload blocked sites
+    chrome.runtime.sendMessage({ action: "reloadBlockedSites" }, () => {
+      if (chrome.runtime.lastError) {
+        console.debug("Background script not ready:", chrome.runtime.lastError.message);
+      } else {
+        console.log("✅ Background script notified to reload blocked sites");
+      }
+    });
+    
+    // Notify any listening popup that token is now available
+    chrome.runtime.sendMessage({ action: "tokenUpdated", token: token }, () => {
+      if (chrome.runtime.lastError) {
+        console.debug("Popup not open:", chrome.runtime.lastError.message);
+      } else {
+        console.log("✅ Popup notified of token update");
+      }
+    });
+  });
+}
+
 // Listen for messages from the web page (frontend)
 window.addEventListener("message", (event) => {
   // Only accept messages from the same origin
@@ -539,28 +820,73 @@ window.addEventListener("message", (event) => {
 
   // Check if it's a token message from our frontend
   if (event.data.type === "FOCUS_BLOCKER_AUTH" && event.data.token) {
-    console.log("📩 Received token from frontend");
-    
-    // Store the token in extension storage
-    chrome.storage.local.set({ token: event.data.token }, () => {
-      console.log("✅ Token saved to extension storage");
-      
-      // Notify background script to reload blocked sites
-      chrome.runtime.sendMessage({ action: "reloadBlockedSites" });
-      
-      // Notify any listening popup that token is now available
-      chrome.runtime.sendMessage({ action: "tokenUpdated", token: event.data.token });
+    console.log("📩 Received token from frontend (postMessage)");
+    saveTokenToExtension(event.data.token);
+  }
+  
+  // Check if it's a sync request from frontend
+  if (event.data.type === "FOCUS_BLOCKER_SYNC_REQUEST") {
+    console.log(`🔄 Frontend requested sync: ${event.data.syncType}`);
+    // Forward to background script
+    chrome.runtime.sendMessage({ 
+      action: "syncFromBackend", 
+      syncType: event.data.syncType || "all" 
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.debug("Background script not ready:", chrome.runtime.lastError.message);
+      } else {
+        console.log("✅ Sync request sent to background script");
+      }
     });
   }
 });
 
-// Listen for messages from background script
+// Also proactively get token when content script loads
+// This helps if the frontend sent the token before the content script was ready
+setTimeout(async () => {
+  console.log("🔍 Content script ready, checking for token...");
+  
+  // First try to get from localStorage
+  const token = await getTokenFromPageStorage();
+  if (token) {
+    console.log("🔑 Found token in localStorage on content script load");
+    saveTokenToExtension(token);
+  } else {
+    // Fallback: request from frontend
+    console.log("📡 Requesting token from frontend...");
+    window.postMessage({ type: "FOCUS_BLOCKER_REQUEST_TOKEN" }, "*");
+  }
+}, 1000);
+
+// Listen for messages from background script and extension popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "requestTokenFromFrontend") {
+  // Handle session updates from extension popup to notify frontend
+  if (message.action === "extensionSessionUpdate") {
+    console.log("🔄 Extension session update:", message.type);
+    
+    // Notify frontend page about session change
+    window.postMessage({
+      type: 'FOCUS_BLOCKER_EXTENSION_SESSION_UPDATE',
+      sessionAction: message.type,
+      sessionId: message.sessionId
+    }, '*');
+    
+    sendResponse({ status: "notified" });
+    return true;
+  } else if (message.action === "requestTokenFromFrontend") {
     console.log("📨 Popup requested token from frontend");
     
-    // Request token from the frontend page
-    window.postMessage({ type: "FOCUS_BLOCKER_REQUEST_TOKEN" }, "*");
+    // First, try to get token directly from localStorage (faster)
+    getTokenFromPageStorage().then((token) => {
+      if (token) {
+        console.log("🔑 Found token in page localStorage, saving to extension...");
+        saveTokenToExtension(token);
+      } else {
+        // Fallback: Request token from the frontend page via postMessage
+        console.log("🔍 Token not in localStorage, requesting from frontend...");
+        window.postMessage({ type: "FOCUS_BLOCKER_REQUEST_TOKEN" }, "*");
+      }
+    });
     
     sendResponse({ status: "requested" });
   } else if (message.action === "updateBlockingState") {
@@ -568,46 +894,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // CRITICAL: Only activate blocking if BOTH isBlocking is true AND there's an active session
     // Use activeSessionId from message if provided, otherwise check storage
-    const activeSessionId = message.activeSessionId !== undefined 
-      ? message.activeSessionId 
-      : (await new Promise((resolve) => {
-          chrome.storage.local.get(['activeSessionId'], (result) => {
-            resolve(result.activeSessionId);
+    (async () => {
+      const activeSessionId = message.activeSessionId !== undefined 
+        ? message.activeSessionId 
+        : await new Promise((resolve) => {
+            chrome.storage.local.get(['activeSessionId'], (result) => {
+              resolve(result.activeSessionId);
+            });
           });
-        }));
-    
-    isBlockingActive = message.isBlocking === true && !!activeSessionId;
-    blockedSites = message.blockedSites || [];
-    
-    console.log('🔒 Blocking state:', {
-      isBlocking: message.isBlocking,
-      activeSessionId: activeSessionId,
-      hasActiveSession: !!activeSessionId,
-      isBlockingActive: isBlockingActive
-    });
-    
-    // Update all blocking-related data
-    const updateData = {};
-    if (message.customBlockPage !== undefined) {
-      updateData.customBlockPage = message.customBlockPage;
-    }
-    if (message.timeLimits !== undefined) {
-      updateData.timeLimits = message.timeLimits;
-    }
-    if (message.activeSchedules !== undefined) {
-      updateData.activeSchedules = message.activeSchedules;
-    }
-    
-    if (Object.keys(updateData).length > 0) {
-      chrome.storage.local.set(updateData);
-    }
-    
-    // Remove overlay first, then re-check (will inject with new settings if needed)
-    removeOverlay();
-    overlayInjected = false; // Reset flag
-    setTimeout(() => {
-      checkAndBlockCurrentSite();
-    }, 50);
+      
+      // Update blocked sites first
+      blockedSites = message.blockedSites || [];
+      
+      // Check if we have blocked sites, time limits, or schedules
+      const hasBlockedSites = blockedSites.length > 0;
+      const hasTimeLimits = (message.timeLimits && message.timeLimits.length > 0);
+      const hasSchedules = (message.activeSchedules && message.activeSchedules.length > 0);
+      
+      // CRITICAL: Only activate blocking if we have an active session AND blocking is enabled AND we have something to block
+      // If we don't have blocked sites, time limits, or schedules, FORCE blocking to be disabled
+      isBlockingActive = message.isBlocking === true && 
+                        !!activeSessionId && 
+                        (hasBlockedSites || hasTimeLimits || hasSchedules);
+      
+      // Safety check: If no blocked sites and no time limits/schedules, disable blocking
+      if (!hasBlockedSites && !hasTimeLimits && !hasSchedules) {
+        isBlockingActive = false;
+        console.log('⚠️ CRITICAL: No blocked sites, time limits, or schedules - FORCING blocking to disabled');
+      }
+      
+      console.log('🔒 Blocking state updated:', {
+        isBlocking: message.isBlocking,
+        activeSessionId: activeSessionId,
+        hasActiveSession: !!activeSessionId,
+        isBlockingActive: isBlockingActive,
+        blockedSitesCount: blockedSites.length,
+        blockedSites: blockedSites,
+        hasTimeLimits: hasTimeLimits,
+        hasSchedules: hasSchedules,
+        willBlock: isBlockingActive && hasBlockedSites ? 'Only sites in blocked list' : (isBlockingActive ? 'Time limits/schedules only' : 'Nothing - disabled')
+      });
+      
+      // Update all blocking-related data
+      const updateData = {};
+      if (message.customBlockPage !== undefined) {
+        updateData.customBlockPage = message.customBlockPage;
+      }
+      if (message.timeLimits !== undefined) {
+        updateData.timeLimits = message.timeLimits;
+      }
+      if (message.activeSchedules !== undefined) {
+        updateData.activeSchedules = message.activeSchedules;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        chrome.storage.local.set(updateData);
+      }
+      
+      // Remove overlay first, then re-check (will inject with new settings if needed)
+      removeOverlay();
+      overlayInjected = false; // Reset flag
+      setTimeout(() => {
+        checkAndBlockCurrentSite();
+      }, 50);
+    })();
     
     sendResponse({ status: "updated" });
   } else if (message.action === "checkBlocking") {
