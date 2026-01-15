@@ -1,46 +1,35 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useAuthStore from '../stores/authStore';
-import { getUserBlockedSites, createBlockedSite, deleteBlockedSite } from '../services/blockedSiteService';
-import { ArrowLeft, Shield, Plus, Trash2, CheckCircle, Save } from 'lucide-react';
+import { useAuthStore, useBlockedSiteStore, useUIStore } from '../stores';
+import { ArrowLeft, Shield, Plus, Trash2, CheckCircle } from 'lucide-react';
 
 function BlockedSitesPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { 
+    blockedSites, 
+    isLoading: loading, 
+    fetchBlockedSites, 
+    addBlockedSite, 
+    deleteBlockedSite 
+  } = useBlockedSiteStore();
+  const { setSuccessMessage, setErrorMessage } = useUIStore();
   
-  const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [blockedSites, setBlockedSites] = useState([]);
   const [newSiteUrl, setNewSiteUrl] = useState('');
   const [newSiteCategory, setNewSiteCategory] = useState('custom');
 
   useEffect(() => {
     if (user?._id) {
-      loadBlockedSites();
+      fetchBlockedSites(user._id);
     }
   }, [user]);
 
-  const loadBlockedSites = async () => {
-    if (!user?._id) return;
-    
-    try {
-      const sites = await getUserBlockedSites(user._id);
-      setBlockedSites(sites);
-    } catch (err) {
-      console.error('Failed to load blocked sites:', err);
-    }
-  };
-
   const showSuccess = (message) => {
     setSuccessMessage(message);
-    setErrorMessage('');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   const showError = (message) => {
     setErrorMessage(message);
-    setSuccessMessage('');
   };
 
   const handleAddBlockedSite = async (e) => {
@@ -56,16 +45,13 @@ function BlockedSitesPage() {
       return;
     }
     
-    setLoading(true);
     try {
-      await createBlockedSite({
-        userId: user._id,
+      await addBlockedSite(user._id, {
         url: newSiteUrl.trim(),
         category: newSiteCategory,
         isActive: true,
       });
       
-      await loadBlockedSites();
       setNewSiteUrl('');
       setNewSiteCategory('custom');
       showSuccess('Site blocked successfully!');
@@ -75,16 +61,12 @@ function BlockedSitesPage() {
       notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to add blocked site');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleRemoveBlockedSite = async (siteId) => {
-    setLoading(true);
     try {
       await deleteBlockedSite(siteId);
-      await loadBlockedSites();
       showSuccess('Site unblocked successfully!');
       
       // Notify extension to sync
@@ -92,8 +74,6 @@ function BlockedSitesPage() {
       notifyExtensionSync('blockedSites');
     } catch (err) {
       showError(err.message || 'Failed to remove blocked site');
-    } finally {
-      setLoading(false);
     }
   };
 

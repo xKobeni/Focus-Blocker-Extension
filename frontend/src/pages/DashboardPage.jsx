@@ -4,7 +4,7 @@ import useAuthStore from '../stores/authStore';
 import { getUserFocusSessions, calculateSessionStats, createFocusSession, endFocusSession, getActiveFocusSessions } from '../services/focusSessionService';
 import { getUserAchievements } from '../services/achievementService';
 import { getUserBlockedSites } from '../services/blockedSiteService';
-import { LogOut, User, Zap, Target, TrendingUp, Award, Shield, Play, Square, Flame, Settings, BarChart3, Clock, Calendar, FileText } from 'lucide-react';
+import { LogOut, User, Zap, Target, TrendingUp, Award, Shield, Play, Square, Flame, Settings, BarChart3, Clock, Calendar, FileText, Trophy, TestTubes } from 'lucide-react';
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -265,13 +265,22 @@ function DashboardPage() {
             
             <div className="flex items-center gap-4">
               {user?.role === 'admin' && (
-                <button
-                  onClick={() => navigate('/admin')}
-                  className="px-3 py-1 bg-purple-600/20 border border-purple-500 rounded-full text-xs font-medium text-purple-400 hover:bg-purple-600/30 transition-colors"
-                >
-                  <Shield size={14} className="inline mr-1" />
-                  Admin Panel
-                </button>
+                <>
+                  <button
+                    onClick={() => navigate('/admin')}
+                    className="px-3 py-1 bg-purple-600/20 border border-purple-500 rounded-full text-xs font-medium text-purple-400 hover:bg-purple-600/30 transition-colors"
+                  >
+                    <Shield size={14} className="inline mr-1" />
+                    Admin Panel
+                  </button>
+                  <button
+                    onClick={() => navigate('/api-test')}
+                    className="px-3 py-1 bg-cyan-600/20 border border-cyan-500 rounded-full text-xs font-medium text-cyan-400 hover:bg-cyan-600/30 transition-colors"
+                  >
+                    <TestTubes size={14} className="inline mr-1" />
+                    API Tests
+                  </button>
+                </>
               )}
                 <button
                   onClick={() => navigate('/blocked-sites')}
@@ -279,6 +288,13 @@ function DashboardPage() {
                 >
                   <Shield size={16} />
                   Blocked Sites
+                </button>
+                <button
+                  onClick={() => navigate('/challenges')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-sm font-medium transition-colors"
+                >
+                  <Trophy size={16} />
+                  Challenges
                 </button>
                 <button
                   onClick={() => navigate('/settings')}
@@ -535,12 +551,33 @@ function DashboardPage() {
               <span className="text-sm font-medium">Schedule</span>
             </button>
             <button
+              onClick={() => navigate('/challenges')}
+              className="flex flex-col items-center gap-2 p-4 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors border border-slate-700"
+            >
+              <Trophy size={24} className="text-yellow-400" />
+              <span className="text-sm font-medium">Challenges</span>
+            </button>
+          </div>
+          
+          {/* Second row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <button
               onClick={() => navigate('/custom-block-page')}
               className="flex flex-col items-center gap-2 p-4 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors border border-slate-700"
             >
               <FileText size={24} className="text-pink-400" />
               <span className="text-sm font-medium">Custom Block Page</span>
             </button>
+            
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => navigate('/api-test')}
+                className="flex flex-col items-center gap-2 p-4 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors border border-cyan-700"
+              >
+                <TestTubes size={24} className="text-cyan-400" />
+                <span className="text-sm font-medium">API Test Suite</span>
+              </button>
+            )}
           </div>
         </div>
 

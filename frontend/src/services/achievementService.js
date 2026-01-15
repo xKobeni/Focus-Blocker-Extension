@@ -49,3 +49,51 @@ export async function createAchievement(achievementData) {
 
   return data;
 }
+
+// Get all available achievements
+export async function getAllAchievements() {
+  const token = getToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/achievements`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || 'Failed to fetch achievements');
+  }
+
+  return data;
+}
+
+// Check user achievements (trigger check for new achievements)
+export async function checkUserAchievements(userId) {
+  const token = getToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/achievements/user/${userId}/check`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || 'Failed to check achievements');
+  }
+
+  return data;
+}

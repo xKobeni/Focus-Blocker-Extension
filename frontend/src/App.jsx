@@ -16,6 +16,8 @@ import CustomBlockPagePage from './pages/CustomBlockPagePage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import AuthCallbackPage from './pages/AuthCallbackPage.jsx';
 import PopupPage from './pages/PopupPage.jsx';
+import ChallengesPage from './pages/ChallengesPage.jsx';
+import ApiTestPage from './pages/ApiTestPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import useAuthStore from './stores/authStore';
 import { getToken } from './services/authService';
@@ -175,10 +177,28 @@ function AppRoutes() {
         />
         
         <Route 
+          path="/challenges" 
+          element={
+            <ProtectedRoute>
+              <ChallengesPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
           path="/admin" 
           element={
             <ProtectedRoute>
               <AdminPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/api-test" 
+          element={
+            <ProtectedRoute>
+              <ApiTestPage />
             </ProtectedRoute>
           } 
         />

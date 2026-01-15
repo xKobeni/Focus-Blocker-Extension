@@ -1,17 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useAuthStore from '../stores/authStore';
+import { useAuthStore, useSettingsStore, useUIStore } from '../stores';
 import { updateUserProfile } from '../services/userService';
-import { LogOut, User, Lock, Globe, ArrowLeft, Save, CheckCircle, Key } from 'lucide-react';
+import ChallengeSettings from '../components/settings/ChallengeSettings';
+import { LogOut, User, Lock, Globe, Trophy, ArrowLeft, Save, CheckCircle, Key } from 'lucide-react';
 
 function SettingsPage() {
   const navigate = useNavigate();
   const { user, fetchUser, logout } = useAuthStore();
   
+  // Settings Store
+  const {
+    userSettings,
+    fetchSettings,
+    updateSettings,
+    createSettings
+  } = useSettingsStore();
+  
+  // UI Store
+  const {
+    successMessage,
+    errorMessage,
+    setSuccessMessage,
+    setErrorMessage
+  } = useUIStore();
+  
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
   
   // Profile form
   const [name, setName] = useState('');
@@ -44,19 +59,20 @@ function SettingsPage() {
       setFocusGoalMinutes(user.focusGoalMinutes || 60);
       setTheme(user.theme || 'dark');
       
+      // Load user settings
+      fetchSettings(user._id).catch(() => {
+        console.debug('User settings not found');
+      });
     }
-  }, [user]);
+  }, [user, fetchSettings]);
 
 
   const showSuccess = (message) => {
     setSuccessMessage(message);
-    setErrorMessage('');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   const showError = (message) => {
     setErrorMessage(message);
-    setSuccessMessage('');
   };
 
   const handleUpdateProfile = async (e) => {
@@ -156,10 +172,26 @@ function SettingsPage() {
     }
   };
 
+  const handleSaveChallengeSettings = async (challengeSettings) => {
+    if (!user?._id) return;
+    
+    try {
+      if (userSettings) {
+        await updateSettings(user._id, challengeSettings);
+      } else {
+        await createSettings(user._id, challengeSettings);
+      }
+      showSuccess('Challenge settings saved successfully!');
+    } catch (err) {
+      throw new Error(err.message || 'Failed to save challenge settings');
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'security', label: 'Security', icon: Lock },
     { id: 'preferences', label: 'Preferences', icon: Globe },
+    { id: 'challenges', label: 'Challenges', icon: Trophy },
   ];
 
   return (
@@ -466,6 +498,18 @@ function SettingsPage() {
                       </button>
                     </div>
                   </form>
+                </div>
+              )}
+
+              {/* Challenges Tab */}
+              {activeTab === 'challenges' && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-6">Challenge Settings</h2>
+                  <ChallengeSettings
+                    settings={userSettings}
+                    onSave={handleSaveChallengeSettings}
+                    onCancel={() => {}}
+                  />
                 </div>
               )}
 

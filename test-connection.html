@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend-Frontend Connection Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .test-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .test-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .status.pending {
+            background: #ffc107;
+            color: #000;
+        }
+        
+        .status.success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .status.error {
+            background: #dc3545;
+            color: white;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .input-group {
+            margin: 15px 0;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .success-text {
+            color: #28a745;
+        }
+        
+        .error-text {
+            color: #dc3545;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .info-box strong {
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Connection Test</h1>
+        <p class="subtitle">Backend-Frontend Integration Verification</p>
+        
+        <div class="info-box">
+            <strong>📋 Instructions:</strong> Make sure both backend (port 5000) and frontend (port 5173) are running, then login to get your token.
+        </div>
+        
+        <!-- Test 1: Backend Health Check -->
+        <div class="test-section">
+            <h3>
+                1. Backend Health Check
+                <span id="health-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Verify backend server is running on http://localhost:5000</p>
+            <button onclick="testBackendHealth()">Test Backend</button>
+            <div id="health-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <!-- Test 2: Authentication -->
+        <div class="test-section">
+            <h3>
+                2. Authentication Token
+                <span id="auth-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Login to the frontend and paste your JWT token here</p>
+            <div class="input-group">
+                <label for="token-input">JWT Token:</label>
+                <input type="text" id="token-input" placeholder="Paste token from localStorage.getItem('token')">
+            </div>
+            <button onclick="saveToken()">Save Token</button>
+            <button onclick="getTokenFromLocalStorage()">Auto-Get from Frontend</button>
+            <div id="auth-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <!-- Test 3: User Settings -->
+        <div class="test-section">
+            <h3>
+                3. User Settings API
+                <span id="settings-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Test GET/POST user settings endpoints</p>
+            <div class="input-group">
+                <label for="user-id">User ID:</label>
+                <input type="text" id="user-id" placeholder="Your user ID">
+            </div>
+            <button onclick="testGetSettings()">Get Settings</button>
+            <button onclick="testCreateSettings()">Create Settings</button>
+            <div id="settings-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <!-- Test 4: Challenge Generation -->
+        <div class="test-section">
+            <h3>
+                4. Challenge Generation
+                <span id="challenge-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Test challenge generation and verification</p>
+            <button onclick="testGenerateChallenge()">Generate Challenge</button>
+            <button onclick="testVerifyChallenge()" id="verify-btn" disabled>Verify Challenge</button>
+            <div id="challenge-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <!-- Test 5: Active Unlocks -->
+        <div class="test-section">
+            <h3>
+                5. Active Unlocks
+                <span id="unlocks-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Test temporary unlock management</p>
+            <button onclick="testGetActiveUnlocks()">Get Active Unlocks</button>
+            <button onclick="testCheckDomain()">Check Domain Unlock</button>
+            <div id="unlocks-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <!-- Test 6: Challenge Stats -->
+        <div class="test-section">
+            <h3>
+                6. Challenge Statistics
+                <span id="stats-status" class="status pending">PENDING</span>
+            </h3>
+            <p>Test challenge statistics endpoint</p>
+            <button onclick="testGetStats()">Get Stats</button>
+            <div id="stats-result" class="result" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <script>
+        let token = '';
+        let userId = '';
+        let currentChallenge = null;
+        
+        const API_BASE = 'http://localhost:5000';
+        
+        // Test 1: Backend Health
+        async function testBackendHealth() {
+            const status = document.getElementById('health-status');
+            const result = document.getElementById('health-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/`);
+                const data = await response.json();
+                
+                status.textContent = 'SUCCESS';
+                status.className = 'status success';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="success-text">✅ Backend is running!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ Backend not reachable</span>\n\nError: ${error.message}\n\nMake sure backend is running on port 5000`;
+            }
+        }
+        
+        // Test 2: Save Token
+        function saveToken() {
+            const input = document.getElementById('token-input');
+            token = input.value.trim();
+            const status = document.getElementById('auth-status');
+            const result = document.getElementById('auth-result');
+            
+            if (token) {
+                status.textContent = 'SUCCESS';
+                status.className = 'status success';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="success-text">✅ Token saved!</span>\n\nToken: ${token.substring(0, 20)}...`;
+            } else {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = '<span class="error-text">❌ Please enter a token</span>';
+            }
+        }
+        
+        function getTokenFromLocalStorage() {
+            const result = document.getElementById('auth-result');
+            result.style.display = 'block';
+            result.innerHTML = `<span class="error-text">❌ Cannot access localStorage from this page</span>\n\nPlease:\n1. Open frontend (localhost:5173)\n2. Login\n3. Open browser console (F12)\n4. Run: localStorage.getItem('token')\n5. Copy the token\n6. Paste it in the input above`;
+        }
+        
+        // Test 3: User Settings
+        async function testGetSettings() {
+            userId = document.getElementById('user-id').value.trim();
+            if (!userId) {
+                alert('Please enter your User ID');
+                return;
+            }
+            
+            const status = document.getElementById('settings-status');
+            const result = document.getElementById('settings-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/user-settings/user/${userId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Settings retrieved!</span>\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to get settings');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        async function testCreateSettings() {
+            userId = document.getElementById('user-id').value.trim();
+            if (!userId) {
+                alert('Please enter your User ID');
+                return;
+            }
+            
+            const status = document.getElementById('settings-status');
+            const result = document.getElementById('settings-result');
+            
+            const settings = {
+                challengeSettings: {
+                    enabled: true,
+                    allowedTypes: ['math', 'memory', 'typing'],
+                    difficulty: 2,
+                    unlockDuration: 15,
+                    maxUnlocksPerSession: 3,
+                    requireWebcam: false,
+                    cooldownMinutes: 5
+                }
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/user-settings/user/${userId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Settings created/updated!</span>\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to create settings');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        // Test 4: Challenge Generation
+        async function testGenerateChallenge() {
+            userId = document.getElementById('user-id').value.trim();
+            if (!userId) {
+                alert('Please enter your User ID');
+                return;
+            }
+            
+            const status = document.getElementById('challenge-status');
+            const result = document.getElementById('challenge-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/challenges/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        domain: 'youtube.com',
+                        type: 'math'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentChallenge = data;
+                    document.getElementById('verify-btn').disabled = false;
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Challenge generated!</span>\n\nQuestion: ${data.content.question}\nDifficulty: ${data.difficulty}\nXP Reward: ${data.xpReward}\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to generate challenge');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        async function testVerifyChallenge() {
+            if (!currentChallenge) {
+                alert('Generate a challenge first!');
+                return;
+            }
+            
+            const answer = prompt(`Solve: ${currentChallenge.content.question} = ?`);
+            if (!answer) return;
+            
+            const status = document.getElementById('challenge-status');
+            const result = document.getElementById('challenge-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/challenges/${currentChallenge.id}/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userAnswer: answer,
+                        timeTaken: 15
+                    })
+                });
+                
+                const data = await response.json();
+                
+                result.style.display = 'block';
+                if (data.success) {
+                    result.innerHTML = `<span class="success-text">🎉 CORRECT!</span>\n\nXP Awarded: ${data.xpAwarded}\nUnlock Duration: ${data.unlockDuration} minutes\nExpires: ${new Date(data.expiresAt).toLocaleTimeString()}\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    result.innerHTML = `<span class="error-text">❌ WRONG!</span>\n\n${data.message}\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        // Test 5: Active Unlocks
+        async function testGetActiveUnlocks() {
+            const status = document.getElementById('unlocks-status');
+            const result = document.getElementById('unlocks-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/temporary-unlocks/active`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Active unlocks retrieved!</span>\n\nCount: ${data.length}\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to get unlocks');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        async function testCheckDomain() {
+            const status = document.getElementById('unlocks-status');
+            const result = document.getElementById('unlocks-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/temporary-unlocks/check/youtube.com`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Domain check complete!</span>\n\nIs Unlocked: ${data.isUnlocked}\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to check domain');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        // Test 6: Challenge Stats
+        async function testGetStats() {
+            const status = document.getElementById('stats-status');
+            const result = document.getElementById('stats-result');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/challenges/stats`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.textContent = 'SUCCESS';
+                    status.className = 'status success';
+                    result.style.display = 'block';
+                    result.innerHTML = `<span class="success-text">✅ Stats retrieved!</span>\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    throw new Error(data.message || 'Failed to get stats');
+                }
+            } catch (error) {
+                status.textContent = 'ERROR';
+                status.className = 'status error';
+                result.style.display = 'block';
+                result.innerHTML = `<span class="error-text">❌ ${error.message}</span>`;
+            }
+        }
+        
+        // Auto-test backend health on load
+        window.addEventListener('load', () => {
+            setTimeout(testBackendHealth, 500);
+        });
+    </script>
+</body>
+</html>
